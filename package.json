@@ -1,0 +1,75 @@
+{
+  "name": "debug-toolbox",
+  "version": "1.0.0",
+  "description": "调试百宝箱 - 工业协议调试与网络现场工具集",
+  "main": "main.js",
+  "scripts": {
+    "dev": "node scripts/dev.js",
+    "build": "vite build",
+    "package": "npm run build && ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/ ELECTRON_BUILDER_BINARIES_MIRROR=https://npmmirror.com/mirrors/electron-builder-binaries/ electron-builder"
+  },
+  "keywords": [
+    "modbus",
+    "iec104",
+    "iec61850",
+    "mms",
+    "goose",
+    "socket",
+    "ping",
+    "converter",
+    "electron"
+  ],
+  "author": "Antigravity",
+  "license": "MIT",
+  "dependencies": {
+    "lucide-react": "0.344.0",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "ssh2": "^1.17.0",
+    "xterm": "^5.3.0",
+    "xterm-addon-fit": "^0.8.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "4.7.0",
+    "electron": "^30.5.1",
+    "electron-builder": "24.13.3",
+    "png-to-ico": "^3.0.2",
+    "vite": "5.4.21"
+  },
+  "build": {
+    "appId": "com.antigravity.debugtoolbox",
+    "productName": "调试百宝箱",
+    "directories": {
+      "output": "dist-package"
+    },
+    "files": [
+      "dist/**/*",
+      "main.js",
+      "preload.js",
+      "modbus-client.js",
+      "modbus-simulator.js",
+      "iec104-client.js",
+      "iec104-simulator.js",
+      "iec61850-mms-client.js",
+      "iec61850-mms-server.js",
+      "iec61850-goose.js",
+      "network-tool.js",
+      "socket-debugger.js",
+      "package.json"
+    ],
+    "mac": {
+      "target": [
+        "dmg"
+      ],
+      "category": "public.app-category.developer-tools",
+      "icon": "build/icon.icns"
+    },
+    "win": {
+      "target": [
+        "nsis",
+        "zip"
+      ],
+      "icon": "build/icon.ico"
+    }
+  }
+}
