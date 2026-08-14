@@ -28,6 +28,7 @@ const TAG = 'v1.0.0';
 const assets = [
   { name: '调试百宝箱-1.0.0-arm64.dmg', contentType: 'application/octet-stream' },
   { name: '调试百宝箱 Setup 1.0.0.exe', contentType: 'application/octet-stream' },
+  { name: '调试百宝箱-1.0.0-win.zip', contentType: 'application/zip' },
   { name: '调试百宝箱-1.0.0-arm64-win.zip', contentType: 'application/zip' }
 ];
 
