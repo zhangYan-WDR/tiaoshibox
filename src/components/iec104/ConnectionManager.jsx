@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Network, Plus, Trash2, Power, Settings, ChevronDown, ChevronUp, Bookmark, Edit2 } from 'lucide-react';
 
 export default function ConnectionManager({ connections, activeConnId, onConnect, onDisconnect, onDeleteConnection, onSelectActive }) {
+  const [name, setName] = useState('');
   const [ip, setIp] = useState('127.0.0.1');
   const [port, setPort] = useState('2404');
   const [commonAddress, setCommonAddress] = useState('1');
@@ -27,6 +28,7 @@ export default function ConnectionManager({ connections, activeConnId, onConnect
 
   const handleSaveConfig = () => {
     const newConfig = {
+      name: name || `${ip}:${port}`,
       ip,
       port: parseInt(port) || 2404,
       commonAddress: parseInt(commonAddress) || 1,
@@ -39,6 +41,7 @@ export default function ConnectionManager({ connections, activeConnId, onConnect
     };
 
     const exists = savedConfigs.some(c => 
+      c.name === newConfig.name &&
       c.ip === newConfig.ip && 
       c.port === newConfig.port && 
       c.commonAddress === newConfig.commonAddress &&
@@ -58,6 +61,7 @@ export default function ConnectionManager({ connections, activeConnId, onConnect
   };
 
   const handleLoadConfig = (cfg) => {
+    setName(cfg.name || '');
     setIp(cfg.ip);
     setPort(cfg.port.toString());
     setCommonAddress(cfg.commonAddress.toString());
@@ -78,6 +82,7 @@ export default function ConnectionManager({ connections, activeConnId, onConnect
 
   const handleStartEdit = (c) => {
     setEditingId(c.id);
+    setName(c.name || '');
     setIp(c.ip);
     setPort(c.port.toString());
     setCommonAddress(c.commonAddress.toString());
@@ -92,6 +97,7 @@ export default function ConnectionManager({ connections, activeConnId, onConnect
 
   const handleCancelEdit = () => {
     setEditingId(null);
+    setName('');
     setIp('127.0.0.1');
     setPort('2404');
     setCommonAddress('1');
@@ -108,6 +114,7 @@ export default function ConnectionManager({ connections, activeConnId, onConnect
     const id = editingId || `${ip}:${port}-${Date.now().toString(36).substr(-4)}`;
     onConnect({
       id,
+      name: name || `${ip}:${port}`,
       ip,
       port: parseInt(port) || 2404,
       commonAddress: parseInt(commonAddress) || 1,
@@ -130,6 +137,17 @@ export default function ConnectionManager({ connections, activeConnId, onConnect
           <Network size={16} color="var(--color-primary)" />
           {editingId ? '修改 IEC104 主站通道' : '新建 IEC104 主站通道'}
         </h3>
+        
+        <div style={{ marginBottom: '8px' }}>
+          <label className="label-text">通道名称 (选填)</label>
+          <input 
+            type="text" 
+            className="input-field" 
+            value={name} 
+            onChange={e => setName(e.target.value)} 
+            placeholder="未填写时默认使用 IP:Port" 
+          />
+        </div>
         
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '8px' }}>
           <div>
@@ -286,10 +304,10 @@ export default function ConnectionManager({ connections, activeConnId, onConnect
               >
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
                   <span style={{ fontSize: '12.5px', fontWeight: '600', color: 'var(--text-main)' }}>
-                    {cfg.ip}:{cfg.port}
+                    {cfg.name || `${cfg.ip}:${cfg.port}`}
                   </span>
                   <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                    Common Addr: {cfg.commonAddress} | t0/t1: {cfg.t0}/{cfg.t1}s
+                    {cfg.name ? `${cfg.ip}:${cfg.port} | ` : ''}Common Addr: {cfg.commonAddress} | t0/t1: {cfg.t0}/{cfg.t1}s
                   </span>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }} onClick={e => e.stopPropagation()}>
@@ -300,6 +318,7 @@ export default function ConnectionManager({ connections, activeConnId, onConnect
                       const id = `${cfg.ip}:${cfg.port}-${Date.now().toString(36).substr(-4)}`;
                       onConnect({
                         id,
+                        name: cfg.name || `${cfg.ip}:${cfg.port}`,
                         ip: cfg.ip,
                         port: cfg.port,
                         commonAddress: cfg.commonAddress,
@@ -391,11 +410,11 @@ export default function ConnectionManager({ connections, activeConnId, onConnect
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                         <span className={`status-dot ${statusClass}`} />
                         <strong style={{ fontSize: '13.5px', color: isActive ? 'var(--color-primary)' : 'var(--text-main)' }}>
-                          {c.ip}:{c.port}
+                          {c.name || `${c.ip}:${c.port}`}
                         </strong>
                       </div>
                       <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                        公共地址: {c.commonAddress} | 状态: {statusText}
+                        {c.name ? `${c.ip}:${c.port} | ` : ''}Common Addr: {c.commonAddress} | 状态: {statusText}
                       </div>
                     </div>
                     

@@ -9,9 +9,10 @@ import DataConverter from './components/tools/DataConverter';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('modbus');
-  const [theme, setTheme] = useState('dark'); // 'dark' | 'light'
+  const [theme, setTheme] = useState(() => localStorage.getItem('debugtoolbox:app-theme') || 'dark'); // 'dark' | 'light'
 
   useEffect(() => {
+    localStorage.setItem('debugtoolbox:app-theme', theme);
     if (theme === 'light') {
       document.body.classList.add('light-theme');
     } else {

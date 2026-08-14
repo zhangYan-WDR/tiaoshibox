@@ -34,6 +34,7 @@ export default function ConnectionManager({
   onStartGooseSub,
   onStopGooseSub
 }) {
+  const [mmsConfigName, setMmsConfigName] = useState('');
   const [savedConfigs, setSavedConfigs] = useState(() => {
     try {
       return JSON.parse(localStorage.getItem('iec61850_saved_configs') || '[]');
@@ -44,11 +45,12 @@ export default function ConnectionManager({
 
   const handleSaveConfig = () => {
     const newConfig = {
+      name: mmsConfigName || `${mmsClientIp}:${mmsClientPort}`,
       ip: mmsClientIp,
       port: mmsClientPort
     };
 
-    const exists = savedConfigs.some(c => c.ip === newConfig.ip && c.port === newConfig.port);
+    const exists = savedConfigs.some(c => c.name === newConfig.name && c.ip === newConfig.ip && c.port === newConfig.port);
     if (!exists) {
       const updated = [...savedConfigs, newConfig];
       localStorage.setItem('iec61850_saved_configs', JSON.stringify(updated));
@@ -59,6 +61,7 @@ export default function ConnectionManager({
   const handleLoadConfig = (cfg) => {
     setMmsClientIp(cfg.ip);
     setMmsClientPort(cfg.port);
+    setMmsConfigName(cfg.name || '');
   };
 
   const handleDeleteConfig = (e, index) => {
@@ -80,7 +83,19 @@ export default function ConnectionManager({
         
         {/* MMS Client Config */}
         {activeTab === 'mms-client' && (
-          <div className="form-grid">
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            <div className="form-group" style={{ marginBottom: '0' }}>
+              <label>配置别名 (选填)</label>
+              <input
+                type="text"
+                className="input-field"
+                value={mmsConfigName}
+                onChange={(e) => setMmsConfigName(e.target.value)}
+                placeholder="未填写时默认使用 IP:Port"
+                disabled={mmsClientStatus !== 'DISCONNECTED'}
+              />
+            </div>
+            <div className="form-grid">
             <div className="form-group">
               <label>服务端 IP 地址 (IEC 61850 Server)</label>
               <input
@@ -125,7 +140,8 @@ export default function ConnectionManager({
               )}
             </div>
           </div>
-        )}
+        </div>
+      )}
 
         {/* MMS Client Saved Configurations */}
         {activeTab === 'mms-client' && savedConfigs.length > 0 && (
@@ -152,9 +168,14 @@ export default function ConnectionManager({
                   }}
                   className="saved-config-item"
                 >
-                  <span style={{ fontSize: '11.5px', color: 'var(--text-main)' }}>
-                    {cfg.ip}:{cfg.port}
+                  <span style={{ fontSize: '11.5px', color: 'var(--text-main)', fontWeight: '600' }}>
+                    {cfg.name || `${cfg.ip}:${cfg.port}`}
                   </span>
+                  {cfg.name && (
+                    <span style={{ fontSize: '10.5px', color: 'var(--text-muted)' }}>
+                      ({cfg.ip}:{cfg.port})
+                    </span>
+                  )}
                   <button 
                     type="button" 
                     onClick={(e) => {

@@ -12,7 +12,7 @@ export default function DataConverter() {
   const [bits, setBits] = useState(Array(64).fill(false)); // 64 bits array
   const [bitDecInput, setBitDecInput] = useState('5'); // Default to 5 (Bit 0 and Bit 2 active)
   const [bitHexInput, setBitHexInput] = useState('05');
-  const [bitNamingStart, setBitNamingStart] = useState('1'); // '0' for Bit 0-7, '1' for 第1-8位
+  const [bitNamingStart, setBitNamingStart] = useState('0'); // '0' for Bit 0-7, '1' for 第1-8位
   const [bitDirection, setBitDirection] = useState('LSB'); // 'LSB' for right-to-left index, 'MSB' for left-to-right
 
   // ==========================================

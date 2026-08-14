@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Network, Plus, Trash2, Power, Settings, ChevronDown, ChevronUp, Bookmark, Edit2 } from 'lucide-react';
 
 export default function ConnectionManager({ connections, activeConnId, onConnect, onDisconnect, onDeleteConnection, onSelectActive }) {
+  const [name, setName] = useState('');
   const [ip, setIp] = useState('127.0.0.1');
   const [port, setPort] = useState('502');
   const [unitId, setUnitId] = useState('1');
@@ -25,6 +26,7 @@ export default function ConnectionManager({ connections, activeConnId, onConnect
 
   const handleSaveConfig = () => {
     const newConfig = {
+      name: name || `${ip}:${port}`,
       ip,
       port: parseInt(port) || 502,
       unitId: parseInt(unitId) !== undefined ? parseInt(unitId) : 1,
@@ -35,6 +37,7 @@ export default function ConnectionManager({ connections, activeConnId, onConnect
     };
     
     const exists = savedConfigs.some(c => 
+      c.name === newConfig.name &&
       c.ip === newConfig.ip && 
       c.port === newConfig.port && 
       c.unitId === newConfig.unitId &&
@@ -52,6 +55,7 @@ export default function ConnectionManager({ connections, activeConnId, onConnect
   };
 
   const handleLoadConfig = (cfg) => {
+    setName(cfg.name || '');
     setIp(cfg.ip);
     setPort(cfg.port.toString());
     setUnitId(cfg.unitId.toString());
@@ -70,6 +74,7 @@ export default function ConnectionManager({ connections, activeConnId, onConnect
 
   const handleStartEdit = (c) => {
     setEditingId(c.id);
+    setName(c.name || '');
     setIp(c.ip);
     setPort(c.port.toString());
     setUnitId(c.unitId.toString());
@@ -85,6 +90,7 @@ export default function ConnectionManager({ connections, activeConnId, onConnect
 
   const handleCancelEdit = () => {
     setEditingId(null);
+    setName('');
     setIp('127.0.0.1');
     setPort('502');
     setUnitId('1');
@@ -110,6 +116,7 @@ export default function ConnectionManager({ connections, activeConnId, onConnect
 
     onConnect({
       id,
+      name: name || `${ip}:${port}`,
       ip,
       port: parseInt(port) || 502,
       unitId: parseInt(unitId) !== undefined ? parseInt(unitId) : 1,
@@ -128,6 +135,17 @@ export default function ConnectionManager({ connections, activeConnId, onConnect
           <Network size={16} color="var(--color-primary)" />
           {editingId ? '修改 Modbus TCP 主站通道' : '新建 Modbus TCP 主站通道'}
         </h3>
+        
+        <div style={{ marginBottom: '8px' }}>
+          <label className="label-text">通道名称 (选填)</label>
+          <input 
+            type="text" 
+            className="input-field" 
+            value={name} 
+            onChange={e => setName(e.target.value)} 
+            placeholder="未填写时默认使用 IP:Port" 
+          />
+        </div>
         
         <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 0.8fr', gap: '8px', marginBottom: '8px' }}>
           <div>
@@ -289,10 +307,10 @@ export default function ConnectionManager({ connections, activeConnId, onConnect
               >
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
                   <span style={{ fontSize: '12.5px', fontWeight: '600', color: 'var(--text-main)' }}>
-                    {cfg.ip}:{cfg.port}
+                    {cfg.name || `${cfg.ip}:${cfg.port}`}
                   </span>
                   <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                    Unit ID: {cfg.unitId} | 功能码: FC{cfg.fc} (扫: {cfg.interval}ms)
+                    {cfg.name ? `${cfg.ip}:${cfg.port} | ` : ''}Unit ID: {cfg.unitId} | 功能码: FC{cfg.fc} (扫: {cfg.interval}ms)
                   </span>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }} onClick={e => e.stopPropagation()}>
@@ -311,6 +329,7 @@ export default function ConnectionManager({ connections, activeConnId, onConnect
                       ];
                       onConnect({
                         id,
+                        name: cfg.name || `${cfg.ip}:${cfg.port}`,
                         ip: cfg.ip,
                         port: cfg.port,
                         unitId: cfg.unitId,
@@ -397,11 +416,11 @@ export default function ConnectionManager({ connections, activeConnId, onConnect
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                         <span className={`status-dot ${statusClass}`} />
                         <strong style={{ fontSize: '13.5px', color: isActive ? 'var(--color-primary)' : 'var(--text-main)' }}>
-                          {c.ip}:{c.port}
+                          {c.name || `${c.ip}:${c.port}`}
                         </strong>
                       </div>
                       <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                        Unit ID: {c.unitId} | 状态: {statusText}
+                        {c.name ? `${c.ip}:${c.port} | ` : ''}Unit ID: {c.unitId} | 状态: {statusText}
                       </div>
                     </div>
                     
