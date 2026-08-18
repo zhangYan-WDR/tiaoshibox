@@ -13,6 +13,7 @@ const gooseEngine = require('./iec61850-goose');
 // Import New Helper Engines
 const socketDebugger = require('./socket-debugger');
 const networkTool = require('./network-tool');
+const OPCUAClientWrapper = require('./opcua-client');
 
 let mainWindow = null;
 
@@ -25,6 +26,8 @@ let iec104Simulator = null;
 
 const mmsClients = new Map();
 let mmsServer = null;
+
+const opcuaClients = new Map();
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -107,6 +110,12 @@ function cleanupAll() {
       socketDebugger.stop(id);
     }
   } catch (e) {}
+
+  // 5. OPC UA Clients
+  for (const client of opcuaClients.values()) {
+    try { client.disconnect(); } catch (e) {}
+  }
+  opcuaClients.clear();
 }
 
 app.whenReady().then(() => {
@@ -644,5 +653,135 @@ ipcMain.handle('net:scan', async (event, host, ports) => {
   // Returns open ports once finished, but status is streamed via callbacks
   networkTool.scanPorts(host, ports, mainWindow);
   return { success: true };
+});
+
+// ==========================================
+// IPC HANDLERS: OPC UA CLIENT
+// ==========================================
+ipcMain.handle('opcua:connect', async (event, config) => {
+  const { id } = config;
+  if (opcuaClients.has(id)) {
+    try {
+      await opcuaClients.get(id).disconnect();
+    } catch (e) {}
+    opcuaClients.delete(id);
+  }
+
+  const client = new OPCUAClientWrapper(config);
+
+  client.on('status', (status) => {
+    if (mainWindow) mainWindow.webContents.send('opcua:status', { clientId: id, status });
+  });
+
+  client.on('traffic', (data) => {
+    if (mainWindow) mainWindow.webContents.send('opcua:traffic', data);
+  });
+
+  client.on('log', (data) => {
+    if (mainWindow) {
+      mainWindow.webContents.send('opcua:traffic', {
+        clientId: client.id,
+        dir: 'LOG',
+        hex: '',
+        type: 'LOG',
+        desc: `[${data.level.toUpperCase()}] ${data.message}`,
+        timestamp: data.timestamp
+      });
+    }
+  });
+
+  opcuaClients.set(id, client);
+  
+  try {
+    await client.connect();
+    return { success: true, id };
+  } catch (err) {
+    opcuaClients.delete(id);
+    return { success: false, error: err.message };
+  }
+});
+
+ipcMain.handle('opcua:disconnect', async (event, id) => {
+  const client = opcuaClients.get(id);
+  if (client) {
+    try {
+      await client.disconnect();
+    } catch (e) {}
+    opcuaClients.delete(id);
+    return { success: true };
+  }
+  return { success: false, error: '连接通道不存在' };
+});
+
+ipcMain.handle('opcua:browse', async (event, id, nodeId) => {
+  const client = opcuaClients.get(id);
+  if (client) {
+    try {
+      const references = await client.browse(nodeId);
+      return { success: true, references };
+    } catch (err) {
+      return { success: false, error: err.message };
+    }
+  }
+  return { success: false, error: '客户端未连接' };
+});
+
+ipcMain.handle('opcua:read', async (event, id, nodeId) => {
+  const client = opcuaClients.get(id);
+  if (client) {
+    try {
+      const data = await client.readNode(nodeId);
+      return { success: true, data };
+    } catch (err) {
+      return { success: false, error: err.message };
+    }
+  }
+  return { success: false, error: '客户端未连接' };
+});
+
+ipcMain.handle('opcua:write', async (event, id, params) => {
+  const client = opcuaClients.get(id);
+  if (client) {
+    try {
+      const result = await client.writeNode(params.nodeId, params.value, params.dataType);
+      return { success: true, ...result };
+    } catch (err) {
+      return { success: false, error: err.message };
+    }
+  }
+  return { success: false, error: '客户端未连接' };
+});
+
+ipcMain.handle('opcua:subscribe', async (event, id, nodeId) => {
+  const client = opcuaClients.get(id);
+  if (client) {
+    try {
+      await client.subscribeNode(nodeId, (updateData) => {
+        if (mainWindow) {
+          mainWindow.webContents.send('opcua:data-update', {
+            clientId: id,
+            ...updateData
+          });
+        }
+      });
+      return { success: true };
+    } catch (err) {
+      return { success: false, error: err.message };
+    }
+  }
+  return { success: false, error: '客户端未连接' };
+});
+
+ipcMain.handle('opcua:unsubscribe', async (event, id, nodeId) => {
+  const client = opcuaClients.get(id);
+  if (client) {
+    try {
+      await client.unsubscribeNode(nodeId);
+      return { success: true };
+    } catch (err) {
+      return { success: false, error: err.message };
+    }
+  }
+  return { success: false, error: '客户端未连接' };
 });
 

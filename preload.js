@@ -212,5 +212,34 @@ contextBridge.exposeInMainWorld('api', {
       ipcRenderer.on('net:scan-done', sub);
       return () => ipcRenderer.removeListener('net:scan-done', sub);
     }
+  },
+
+  // ==========================================
+  // OPC UA Client API
+  // ==========================================
+  opcua: {
+    connect: (config) => ipcRenderer.invoke('opcua:connect', config),
+    disconnect: (id) => ipcRenderer.invoke('opcua:disconnect', id),
+    browse: (id, nodeId) => ipcRenderer.invoke('opcua:browse', id, nodeId),
+    readNode: (id, nodeId) => ipcRenderer.invoke('opcua:read', id, nodeId),
+    writeNode: (id, params) => ipcRenderer.invoke('opcua:write', id, params),
+    subscribeNode: (id, nodeId) => ipcRenderer.invoke('opcua:subscribe', id, nodeId),
+    unsubscribeNode: (id, nodeId) => ipcRenderer.invoke('opcua:unsubscribe', id, nodeId),
+    
+    onStatusChange: (callback) => {
+      const sub = (event, data) => callback(data);
+      ipcRenderer.on('opcua:status', sub);
+      return () => ipcRenderer.removeListener('opcua:status', sub);
+    },
+    onTrafficLog: (callback) => {
+      const sub = (event, data) => callback(data);
+      ipcRenderer.on('opcua:traffic', sub);
+      return () => ipcRenderer.removeListener('opcua:traffic', sub);
+    },
+    onDataUpdate: (callback) => {
+      const sub = (event, data) => callback(data);
+      ipcRenderer.on('opcua:data-update', sub);
+      return () => ipcRenderer.removeListener('opcua:data-update', sub);
+    }
   }
 });

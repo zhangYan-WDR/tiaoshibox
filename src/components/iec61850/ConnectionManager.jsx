@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Play, Square, Settings, Wifi, Server, Radio, HelpCircle, Bookmark, Trash2 } from 'lucide-react';
+import { Wifi, Square, Play, Bookmark, Settings, Info, Trash2 } from 'lucide-react';
 
 export default function ConnectionManager({
   activeTab,
@@ -35,6 +35,9 @@ export default function ConnectionManager({
   onStopGooseSub
 }) {
   const [mmsConfigName, setMmsConfigName] = useState('');
+  const [selectedConfigIdx, setSelectedConfigIdx] = useState('');
+  const [editingConfigIdx, setEditingConfigIdx] = useState(null);
+
   const [savedConfigs, setSavedConfigs] = useState(() => {
     try {
       return JSON.parse(localStorage.getItem('iec61850_saved_configs') || '[]');
@@ -50,357 +53,403 @@ export default function ConnectionManager({
       port: mmsClientPort
     };
 
-    const exists = savedConfigs.some(c => c.name === newConfig.name && c.ip === newConfig.ip && c.port === newConfig.port);
-    if (!exists) {
-      const updated = [...savedConfigs, newConfig];
+    if (editingConfigIdx !== null) {
+      const updated = [...savedConfigs];
+      updated[editingConfigIdx] = newConfig;
       localStorage.setItem('iec61850_saved_configs', JSON.stringify(updated));
       setSavedConfigs(updated);
+    } else {
+      const exists = savedConfigs.some(c => c.name === newConfig.name && c.ip === newConfig.ip && c.port === newConfig.port);
+      if (!exists) {
+        const updated = [...savedConfigs, newConfig];
+        localStorage.setItem('iec61850_saved_configs', JSON.stringify(updated));
+        setSavedConfigs(updated);
+        // 自动选中新保存的配置
+        const newIdx = updated.length - 1;
+        setSelectedConfigIdx(newIdx.toString());
+        setEditingConfigIdx(newIdx);
+      }
     }
   };
 
-  const handleLoadConfig = (cfg) => {
+  const handleSaveAsNewConfig = () => {
+    const newConfig = {
+      name: mmsConfigName ? `${mmsConfigName}_副本` : `${mmsClientIp}:${mmsClientPort}_副本`,
+      ip: mmsClientIp,
+      port: mmsClientPort
+    };
+    const updated = [...savedConfigs, newConfig];
+    localStorage.setItem('iec61850_saved_configs', JSON.stringify(updated));
+    setSavedConfigs(updated);
+    // 自动选中新配置
+    const newIdx = updated.length - 1;
+    setSelectedConfigIdx(newIdx.toString());
+    setEditingConfigIdx(newIdx);
+    setMmsConfigName(newConfig.name);
+  };
+
+  const handleCancelConfigEdit = () => {
+    setEditingConfigIdx(null);
+    setSelectedConfigIdx('');
+    setMmsConfigName('');
+    setMmsClientIp('127.0.0.1');
+    setMmsClientPort(10102);
+  };
+
+  const handleLoadConfig = (cfg, idx) => {
     setMmsClientIp(cfg.ip);
     setMmsClientPort(cfg.port);
     setMmsConfigName(cfg.name || '');
+    setSelectedConfigIdx(idx.toString());
+    setEditingConfigIdx(parseInt(idx));
   };
 
-  const handleDeleteConfig = (e, index) => {
-    e.stopPropagation();
+  const handleDeleteConfig = (index) => {
     const updated = savedConfigs.filter((_, i) => i !== index);
     localStorage.setItem('iec61850_saved_configs', JSON.stringify(updated));
     setSavedConfigs(updated);
+    setSelectedConfigIdx('');
+    if (editingConfigIdx === index) {
+      setEditingConfigIdx(null);
+    }
   };
 
   return (
-    <div className="pane" style={{ marginBottom: '16px' }}>
-      <div className="pane-header">
-        <h3>
-          <Settings size={16} color="var(--color-accent)" />
-          模块连接配置与控制
-        </h3>
-      </div>
-      <div className="pane-body">
-        
-        {/* MMS Client Config */}
-        {activeTab === 'mms-client' && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-            <div className="form-group" style={{ marginBottom: '0' }}>
-              <label>配置别名 (选填)</label>
-              <input
-                type="text"
-                className="input-field"
-                value={mmsConfigName}
-                onChange={(e) => setMmsConfigName(e.target.value)}
-                placeholder="未填写时默认使用 IP:Port"
+    <div style={{
+      background: 'var(--bg-secondary)',
+      borderBottom: '1px solid var(--border-color)',
+      padding: '10px 16px',
+      display: 'flex',
+      flexDirection: 'column',
+      gap: '8px',
+      flexShrink: 0,
+      width: '100%'
+    }}>
+      {/* MMS Client Tab Connection Config */}
+      {activeTab === 'mms-client' && (
+        <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '12px', width: '100%' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', flex: 1 }}>
+            
+            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>服务端IP:</span>
+              <input 
+                type="text" 
+                className="input-field" 
+                value={mmsClientIp} 
+                onChange={e => setMmsClientIp(e.target.value)} 
+                placeholder="127.0.0.1" 
+                style={{ width: '105px', padding: '5px 8px', fontSize: '11.5px' }}
+                disabled={mmsClientStatus !== 'DISCONNECTED'}
+              />
+              <span style={{ color: 'var(--text-muted)' }}>:</span>
+              <input 
+                type="number" 
+                className="input-field" 
+                value={mmsClientPort} 
+                onChange={e => setMmsClientPort(parseInt(e.target.value) || 0)} 
+                placeholder="10102" 
+                style={{ width: '56px', padding: '5px 6px', fontSize: '11.5px' }}
                 disabled={mmsClientStatus !== 'DISCONNECTED'}
               />
             </div>
-            <div className="form-grid">
-            <div className="form-group">
-              <label>服务端 IP 地址 (IEC 61850 Server)</label>
-              <input
-                type="text"
-                className="input-field"
-                value={mmsClientIp}
-                onChange={(e) => setMmsClientIp(e.target.value)}
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>别名:</span>
+              <input 
+                type="text" 
+                className="input-field" 
+                value={mmsConfigName} 
+                onChange={e => setMmsConfigName(e.target.value)} 
+                placeholder="选填别名" 
+                style={{ width: '100px', padding: '5px 8px', fontSize: '11.5px' }}
                 disabled={mmsClientStatus !== 'DISCONNECTED'}
               />
             </div>
-            <div className="form-group">
-              <label>MMS TCP 端口</label>
-              <input
-                type="number"
-                className="input-field"
-                value={mmsClientPort}
-                onChange={(e) => setMmsClientPort(parseInt(e.target.value))}
-                disabled={mmsClientStatus !== 'DISCONNECTED'}
-              />
-            </div>
-            <div style={{ display: 'flex', alignItems: 'flex-end', gap: '8px' }}>
+
+            <div style={{ display: 'flex', gap: '6px' }}>
               {mmsClientStatus === 'DISCONNECTED' ? (
                 <>
-                  <button className="btn btn-success" style={{ flex: 1 }} onClick={onMmsConnect}>
-                    <Wifi size={14} /> 连接 MMS 主站
+                  <button className="btn btn-primary" style={{ padding: '4px 12px', fontSize: '11.5px', display: 'flex', alignItems: 'center', gap: '4px' }} onClick={onMmsConnect}>
+                    <Wifi size={13} /> 连接 MMS 主站
                   </button>
-                  <button 
-                    type="button"
-                    className="btn btn-secondary" 
-                    style={{ padding: '8px 12px', display: 'flex', alignItems: 'center', gap: '4px' }} 
-                    onClick={handleSaveConfig}
-                    title="保存此连接配置"
-                  >
-                    <Bookmark size={14} />
-                    保存配置
-                  </button>
+                  {editingConfigIdx !== null ? (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <button 
+                        type="button" 
+                        onClick={handleSaveConfig} 
+                        className="btn btn-primary" 
+                        style={{ padding: '4px 8px', fontSize: '11.5px', display: 'flex', alignItems: 'center', gap: '3px', border: '1px solid var(--color-primary)' }}
+                      >
+                        <Edit2 size={12} />
+                        保存修改
+                      </button>
+                      <button 
+                        type="button" 
+                        onClick={handleSaveAsNewConfig} 
+                        className="btn btn-secondary" 
+                        style={{ padding: '4px 8px', fontSize: '11.5px', display: 'flex', alignItems: 'center', gap: '3px' }}
+                        title="保存为新的独立配置"
+                      >
+                        <Bookmark size={12} />
+                        另存常用
+                      </button>
+                      <button 
+                        type="button" 
+                        onClick={handleCancelConfigEdit} 
+                        className="btn btn-secondary" 
+                        style={{ padding: '4px 6px', fontSize: '11.5px' }}
+                        title="取消修改并清空表单"
+                      >
+                        取消
+                      </button>
+                    </div>
+                  ) : (
+                    <button 
+                      type="button" 
+                      onClick={handleSaveConfig} 
+                      className="btn btn-secondary" 
+                      style={{ padding: '4px 8px', fontSize: '11.5px', display: 'flex', alignItems: 'center', gap: '3px' }}
+                    >
+                      <Bookmark size={12} />
+                      保存常用
+                    </button>
+                  )}
                 </>
               ) : (
-                <button className="btn btn-danger" style={{ width: '100%' }} onClick={onMmsDisconnect}>
-                  <Square size={14} /> 断开主站连接
+                <button className="btn btn-danger" style={{ padding: '4px 12px', fontSize: '11.5px', display: 'flex', alignItems: 'center', gap: '4px' }} onClick={onMmsDisconnect}>
+                  <Square size={13} /> 断开主站连接
                 </button>
               )}
             </div>
+          </div>
+
+          {/* 常用配置 Dropdown */}
+          {savedConfigs.length > 0 && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '4px', borderLeft: '1px solid rgba(255,255,255,0.08)', paddingLeft: '12px' }}>
+              <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>常用:</span>
+              <select 
+                value={selectedConfigIdx}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  if (val !== "") {
+                    const cfg = savedConfigs[parseInt(val)];
+                    handleLoadConfig(cfg, val);
+                  } else {
+                    setSelectedConfigIdx('');
+                  }
+                }}
+                style={{ width: '120px', padding: '4px', fontSize: '11.5px', background: 'rgba(0,0,0,0.4)', color: '#fff', border: '1px solid var(--border-color)', borderRadius: '4px' }}
+              >
+                <option value="">-- 选择配置 --</option>
+                {savedConfigs.map((cfg, idx) => (
+                  <option key={idx} value={idx}>{cfg.name || `${cfg.ip}:${cfg.port}`}</option>
+                ))}
+              </select>
+              {selectedConfigIdx !== '' && (
+                <button
+                  type="button"
+                  onClick={() => handleDeleteConfig(parseInt(selectedConfigIdx))}
+                  style={{
+                    background: 'rgba(255, 56, 96, 0.15)',
+                    border: '1px solid rgba(255, 56, 96, 0.3)',
+                    color: 'var(--color-danger)',
+                    cursor: 'pointer',
+                    padding: '4px 6px',
+                    borderRadius: '4px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    transition: 'all 0.2s'
+                  }}
+                  title="删除此常用配置"
+                >
+                  <Trash2 size={12} />
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* MMS Server Tab Connection Config */}
+      {activeTab === 'mms-server' && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+            <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>监听端口:</span>
+            <input 
+              type="number" 
+              className="input-field" 
+              value={mmsServerPort} 
+              onChange={e => setMmsServerPort(parseInt(e.target.value) || 0)} 
+              placeholder="10102" 
+              style={{ width: '60px', padding: '5px 6px', fontSize: '11.5px' }}
+              disabled={mmsServerActive}
+            />
+          </div>
+
+          <div>
+            {!mmsServerActive ? (
+              <button className="btn btn-primary" style={{ padding: '4px 12px', fontSize: '11.5px', display: 'flex', alignItems: 'center', gap: '4px' }} onClick={onStartServer}>
+                <Play size={13} /> 启动模拟服务端
+              </button>
+            ) : (
+              <button className="btn btn-danger" style={{ padding: '4px 12px', fontSize: '11.5px', display: 'flex', alignItems: 'center', gap: '4px' }} onClick={onStopServer}>
+                <Square size={13} /> 停止模拟服务端
+              </button>
+            )}
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '11px', color: 'var(--text-muted)' }}>
+            <Info size={12} color="var(--color-info)" />
+            <span>提示: 系统端口 102 需要 Root 特权，占用时可改用 10102 端口监听</span>
           </div>
         </div>
       )}
 
-        {/* MMS Client Saved Configurations */}
-        {activeTab === 'mms-client' && savedConfigs.length > 0 && (
-          <div style={{ marginTop: '16px', borderTop: '1px solid var(--border-color)', paddingTop: '12px' }}>
-            <h4 style={{ fontSize: '12px', fontWeight: '600', marginBottom: '8px', color: 'var(--text-light)', display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <Bookmark size={12} color="var(--color-primary)" />
-              已保存的常用配置 ({savedConfigs.length})
-            </h4>
-            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-              {savedConfigs.map((cfg, idx) => (
-                <div 
-                  key={idx}
-                  onClick={() => handleLoadConfig(cfg)}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '8px',
-                    padding: '6px 10px',
-                    background: 'rgba(0,0,0,0.15)',
-                    border: '1px solid rgba(255,255,255,0.03)',
-                    borderRadius: '4px',
-                    cursor: 'pointer',
-                    transition: 'all 0.2s'
-                  }}
-                  className="saved-config-item"
-                >
-                  <span style={{ fontSize: '11.5px', color: 'var(--text-main)', fontWeight: '600' }}>
-                    {cfg.name || `${cfg.ip}:${cfg.port}`}
-                  </span>
-                  {cfg.name && (
-                    <span style={{ fontSize: '10.5px', color: 'var(--text-muted)' }}>
-                      ({cfg.ip}:{cfg.port})
-                    </span>
-                  )}
-                  <button 
-                    type="button" 
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleLoadConfig(cfg);
-                      setTimeout(() => {
-                        onMmsConnect();
-                      }, 50);
-                    }}
-                    style={{
-                      background: 'transparent',
-                      border: 'none',
-                      color: 'var(--color-primary)',
-                      fontSize: '11px',
-                      cursor: 'pointer',
-                      fontWeight: '600',
-                      padding: 0
-                    }}
-                  >
-                    连接
-                  </button>
-                  <button 
-                    type="button" 
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleDeleteConfig(e, idx);
-                    }}
-                    style={{
-                      background: 'transparent',
-                      border: 'none',
-                      color: 'var(--text-muted)',
-                      cursor: 'pointer',
-                      padding: 0,
-                      display: 'flex',
-                      alignItems: 'center'
-                    }}
-                  >
-                    <Trash2 size={12} />
-                  </button>
-                </div>
-              ))}
-            </div>
-            <style>{`
-              .saved-config-item:hover {
-                background: rgba(0, 229, 255, 0.04) !important;
-                border-color: rgba(0, 229, 255, 0.2) !important;
-              }
-            `}</style>
+      {/* GOOSE Publisher Tab Config */}
+      {activeTab === 'goose-pub' && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap', width: '100%' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+            <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>控制块:</span>
+            <input 
+              type="text" 
+              className="input-field" 
+              value={goosePubConfig.gocbRef} 
+              onChange={e => setGoosePubConfig({ ...goosePubConfig, gocbRef: e.target.value })} 
+              style={{ width: '130px', padding: '5px 8px', fontSize: '11px' }}
+              disabled={goosePubRunning}
+            />
           </div>
-        )}
-
-        {/* MMS Server Config */}
-        {activeTab === 'mms-server' && (
-          <div className="form-grid">
-            <div className="form-group">
-              <label>本地监听 TCP 端口</label>
-              <input
-                type="number"
-                className="input-field"
-                value={mmsServerPort}
-                onChange={(e) => setMmsServerPort(parseInt(e.target.value))}
-                disabled={mmsServerActive}
-              />
-            </div>
-            <div className="form-group">
-              <label>说明</label>
-              <div style={{ fontSize: '11px', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                <HelpCircle size={12} color="var(--color-info)" />
-                系统端口 102 可能需要管理员特权，如被占用可改用 10102
-              </div>
-            </div>
-            <div style={{ display: 'flex', alignItems: 'flex-end' }}>
-              {!mmsServerActive ? (
-                <button className="btn btn-success" style={{ width: '100%' }} onClick={onStartServer}>
-                  <Play size={14} /> 启动模拟服务端
-                </button>
-              ) : (
-                <button className="btn btn-danger" style={{ width: '100%' }} onClick={onStopServer}>
-                  <Square size={14} /> 停止模拟服务端
-                </button>
-              )}
-            </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+            <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>发布端ID:</span>
+            <input 
+              type="text" 
+              className="input-field" 
+              value={goosePubConfig.goID} 
+              onChange={e => setGoosePubConfig({ ...goosePubConfig, goID: e.target.value })} 
+              style={{ width: '90px', padding: '5px 8px', fontSize: '11px' }}
+              disabled={goosePubRunning}
+            />
           </div>
-        )}
-
-        {/* GOOSE Publisher Config */}
-        {activeTab === 'goose-pub' && (
-          <div className="form-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))' }}>
-            <div className="form-group">
-              <label>GoCBRef (控制块)</label>
-              <input
-                type="text"
-                className="input-field"
-                value={goosePubConfig.gocbRef}
-                onChange={(e) => setGoosePubConfig({ ...goosePubConfig, gocbRef: e.target.value })}
-                disabled={goosePubRunning}
-              />
-            </div>
-            <div className="form-group">
-              <label>GoID (发布端ID)</label>
-              <input
-                type="text"
-                className="input-field"
-                value={goosePubConfig.goID}
-                onChange={(e) => setGoosePubConfig({ ...goosePubConfig, goID: e.target.value })}
-                disabled={goosePubRunning}
-              />
-            </div>
-            <div className="form-group">
-              <label>APPID (Hex 16位)</label>
-              <input
-                type="text"
-                className="input-field"
-                value={goosePubConfig.appid}
-                onChange={(e) => setGoosePubConfig({ ...goosePubConfig, appid: e.target.value })}
-                disabled={goosePubRunning}
-              />
-            </div>
-            <div className="form-group">
-              <label>多播组 IP / 端口</label>
-              <div style={{ display: 'flex', gap: '4px' }}>
-                <input
-                  type="text"
-                  className="input-field"
-                  style={{ flex: 2 }}
-                  value={goosePubConfig.multicastIp}
-                  onChange={(e) => setGoosePubConfig({ ...goosePubConfig, multicastIp: e.target.value })}
-                  disabled={goosePubRunning}
-                />
-                <input
-                  type="number"
-                  className="input-field"
-                  style={{ flex: 1 }}
-                  value={goosePubConfig.port}
-                  onChange={(e) => setGoosePubConfig({ ...goosePubConfig, port: parseInt(e.target.value) })}
-                  disabled={goosePubRunning}
-                />
-              </div>
-            </div>
-            <div className="form-group">
-              <label>心跳保持时间 / 最快重传 (ms)</label>
-              <div style={{ display: 'flex', gap: '4px' }}>
-                <input
-                  type="number"
-                  className="input-field"
-                  title="心跳间隔 maxTime"
-                  style={{ flex: 1 }}
-                  value={goosePubConfig.maxTime}
-                  onChange={(e) => setGoosePubConfig({ ...goosePubConfig, maxTime: parseInt(e.target.value) })}
-                  disabled={goosePubRunning}
-                />
-                <input
-                  type="number"
-                  className="input-field"
-                  title="变位重传最小间隔 minTime"
-                  style={{ flex: 1 }}
-                  value={goosePubConfig.minTime}
-                  onChange={(e) => setGoosePubConfig({ ...goosePubConfig, minTime: parseInt(e.target.value) })}
-                  disabled={goosePubRunning}
-                />
-              </div>
-            </div>
-            <div style={{ display: 'flex', alignItems: 'flex-end' }}>
-              {!goosePubRunning ? (
-                <button className="btn btn-success" style={{ width: '100%' }} onClick={onStartGoosePub}>
-                  <Radio size={14} /> 启动 GOOSE 发布
-                </button>
-              ) : (
-                <button className="btn btn-danger" style={{ width: '100%' }} onClick={onStopGoosePub}>
-                  <Square size={14} /> 停止 GOOSE 发布
-                </button>
-              )}
-            </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+            <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>APPID:</span>
+            <input 
+              type="text" 
+              className="input-field" 
+              value={goosePubConfig.appid} 
+              onChange={e => setGoosePubConfig({ ...goosePubConfig, appid: e.target.value })} 
+              style={{ width: '50px', padding: '5px 8px', fontSize: '11px' }}
+              disabled={goosePubRunning}
+            />
           </div>
-        )}
-
-        {/* GOOSE Subscriber Config */}
-        {activeTab === 'goose-sub' && (
-          <div className="form-grid">
-            <div className="form-group">
-              <label>多播监听 IP 组</label>
-              <input
-                type="text"
-                className="input-field"
-                value={gooseSubConfig.multicastIp}
-                onChange={(e) => setGooseSubConfig({ ...gooseSubConfig, multicastIp: e.target.value })}
-                disabled={gooseSubRunning}
-              />
-            </div>
-            <div className="form-group">
-              <label>监听 UDP 端口</label>
-              <input
-                type="number"
-                className="input-field"
-                value={gooseSubConfig.port}
-                onChange={(e) => setGooseSubConfig({ ...gooseSubConfig, port: parseInt(e.target.value) })}
-                disabled={gooseSubRunning}
-              />
-            </div>
-            <div className="form-group">
-              <label>APPID 过滤 (可选, Hex)</label>
-              <input
-                type="text"
-                className="input-field"
-                placeholder="留空不过滤"
-                value={gooseSubConfig.appidFilter}
-                onChange={(e) => setGooseSubConfig({ ...gooseSubConfig, appidFilter: e.target.value })}
-                disabled={gooseSubRunning}
-              />
-            </div>
-            <div style={{ display: 'flex', alignItems: 'flex-end' }}>
-              {!gooseSubRunning ? (
-                <button className="btn btn-success" style={{ width: '100%' }} onClick={onStartGooseSub}>
-                  <Wifi size={14} /> 启动订阅监听
-                </button>
-              ) : (
-                <button className="btn btn-danger" style={{ width: '100%' }} onClick={onStopGooseSub}>
-                  <Square size={14} /> 停止订阅监听
-                </button>
-              )}
-            </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+            <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>组播IP/Port:</span>
+            <input 
+              type="text" 
+              className="input-field" 
+              value={goosePubConfig.multicastIp} 
+              onChange={e => setGoosePubConfig({ ...goosePubConfig, multicastIp: e.target.value })} 
+              style={{ width: '95px', padding: '5px 8px', fontSize: '11px' }}
+              disabled={goosePubRunning}
+            />
+            <span style={{ color: 'var(--text-muted)' }}>:</span>
+            <input 
+              type="number" 
+              className="input-field" 
+              value={goosePubConfig.port} 
+              onChange={e => setGoosePubConfig({ ...goosePubConfig, port: parseInt(e.target.value) || 0 })} 
+              style={{ width: '50px', padding: '5px 6px', fontSize: '11px' }}
+              disabled={goosePubRunning}
+            />
           </div>
-        )}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+            <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>心跳/重传(ms):</span>
+            <input 
+              type="number" 
+              className="input-field" 
+              title="心跳间隔 maxTime"
+              value={goosePubConfig.maxTime} 
+              onChange={e => setGoosePubConfig({ ...goosePubConfig, maxTime: parseInt(e.target.value) || 2000 })} 
+              style={{ width: '50px', padding: '5px 6px', fontSize: '11px' }}
+              disabled={goosePubRunning}
+            />
+            <span style={{ color: 'var(--text-muted)' }}>/</span>
+            <input 
+              type="number" 
+              className="input-field" 
+              title="变位重传最小间隔 minTime"
+              value={goosePubConfig.minTime} 
+              onChange={e => setGoosePubConfig({ ...goosePubConfig, minTime: parseInt(e.target.value) || 4 })} 
+              style={{ width: '40px', padding: '5px 6px', fontSize: '11px' }}
+              disabled={goosePubRunning}
+            />
+          </div>
 
-      </div>
+          <div>
+            {!goosePubRunning ? (
+              <button className="btn btn-primary" style={{ padding: '4px 12px', fontSize: '11.5px', display: 'flex', alignItems: 'center', gap: '4px' }} onClick={onStartGoosePub}>
+                <Play size={13} /> 启动 GOOSE 发布
+              </button>
+            ) : (
+              <button className="btn btn-danger" style={{ padding: '4px 12px', fontSize: '11.5px', display: 'flex', alignItems: 'center', gap: '4px' }} onClick={onStopGoosePub}>
+                <Square size={13} /> 停止 GOOSE 发布
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* GOOSE Subscriber Tab Config */}
+      {activeTab === 'goose-sub' && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+            <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>多播IP组:</span>
+            <input 
+              type="text" 
+              className="input-field" 
+              value={gooseSubConfig.multicastIp} 
+              onChange={e => setGooseSubConfig({ ...gooseSubConfig, multicastIp: e.target.value })} 
+              style={{ width: '100px', padding: '5px 8px', fontSize: '11.5px' }}
+              disabled={gooseSubRunning}
+            />
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+            <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>UDP端口:</span>
+            <input 
+              type="number" 
+              className="input-field" 
+              value={gooseSubConfig.port} 
+              onChange={e => setGooseSubConfig({ ...gooseSubConfig, port: parseInt(e.target.value) || 0 })} 
+              style={{ width: '56px', padding: '5px 6px', fontSize: '11.5px' }}
+              disabled={gooseSubRunning}
+            />
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+            <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>APPID过滤 (Hex):</span>
+            <input 
+              type="text" 
+              className="input-field" 
+              placeholder="留空不过滤"
+              value={gooseSubConfig.appidFilter} 
+              onChange={e => setGooseSubConfig({ ...gooseSubConfig, appidFilter: e.target.value })} 
+              style={{ width: '90px', padding: '5px 8px', fontSize: '11.5px' }}
+              disabled={gooseSubRunning}
+            />
+          </div>
+
+          <div>
+            {!gooseSubRunning ? (
+              <button className="btn btn-primary" style={{ padding: '4px 12px', fontSize: '11.5px', display: 'flex', alignItems: 'center', gap: '4px' }} onClick={onStartGooseSub}>
+                <Play size={13} /> 启动订阅监听
+              </button>
+            ) : (
+              <button className="btn btn-danger" style={{ padding: '4px 12px', fontSize: '11.5px', display: 'flex', alignItems: 'center', gap: '4px' }} onClick={onStopGooseSub}>
+                <Square size={13} /> 停止订阅监听
+              </button>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

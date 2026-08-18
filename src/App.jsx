@@ -3,6 +3,7 @@ import Sidebar from './components/Sidebar';
 import ModbusDashboard from './components/modbus/ModbusDashboard';
 import IEC104Dashboard from './components/iec104/IEC104Dashboard';
 import IEC61850Dashboard from './components/iec61850/IEC61850Dashboard';
+import OPCUADashboard from './components/opcua/OPCUADashboard';
 import SocketDebugger from './components/tools/SocketDebugger';
 import NetworkTool from './components/tools/NetworkTool';
 import DataConverter from './components/tools/DataConverter';
@@ -10,6 +11,17 @@ import DataConverter from './components/tools/DataConverter';
 export default function App() {
   const [activeTab, setActiveTab] = useState('modbus');
   const [theme, setTheme] = useState(() => localStorage.getItem('debugtoolbox:app-theme') || 'dark'); // 'dark' | 'light'
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() => {
+    try {
+      return localStorage.getItem('debugtoolbox:sidebar-collapsed') === 'true';
+    } catch (e) {
+      return false;
+    }
+  });
+
+  useEffect(() => {
+    localStorage.setItem('debugtoolbox:sidebar-collapsed', isSidebarCollapsed ? 'true' : 'false');
+  }, [isSidebarCollapsed]);
 
   useEffect(() => {
     localStorage.setItem('debugtoolbox:app-theme', theme);
@@ -28,6 +40,8 @@ export default function App() {
         return <IEC104Dashboard />;
       case 'iec61850':
         return <IEC61850Dashboard />;
+      case 'opcua':
+        return <OPCUADashboard />;
       case 'socket':
         return <SocketDebugger />;
       case 'network':
@@ -42,33 +56,28 @@ export default function App() {
   return (
     <div style={{
       display: 'flex',
+      flexDirection: 'column',
       height: '100vh',
       width: '100vw',
       overflow: 'hidden',
       background: 'transparent'
     }}>
-      {/* Sidebar on the left */}
-      <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} theme={theme} setTheme={setTheme} />
+      {/* Top Navbar */}
+      <Sidebar 
+        activeTab={activeTab} 
+        setActiveTab={setActiveTab} 
+        theme={theme} 
+        setTheme={setTheme} 
+      />
 
-      {/* Main content viewport on the right */}
+      {/* Main content viewport below */}
       <main style={{
         flex: 1,
-        height: '100%',
         display: 'flex',
         flexDirection: 'column',
         overflow: 'hidden',
         position: 'relative'
       }}>
-        {/* macOS Title Bar Spacer (for hiddenInset titleBar drag support) */}
-        <div style={{
-          height: '22px',
-          width: '100%',
-          background: 'var(--bg-secondary)',
-          borderBottom: '1px solid var(--border-color)',
-          WebkitAppRegion: 'drag',
-          flexShrink: 0
-        }} />
-
         {/* Dynamic page component wrapper */}
         <div style={{
           flex: 1,

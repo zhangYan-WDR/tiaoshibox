@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 import Header from './Header';
 import ConnectionManager from './ConnectionManager';
 import MonitorDashboard from './MonitorDashboard';
@@ -9,6 +10,7 @@ import SimulatorConfig from './SimulatorConfig';
 export default function IEC104Dashboard() {
   // 选项卡系统: 'dashboard' | 'commands' | 'traffic' | 'simulator'
   const [activeTab, setActiveTab] = useState('dashboard');
+  const [isConnCollapsed, setIsConnCollapsed] = useState(false);
   
   // 客户端连接管理状态
   const [connections, setConnections] = useState([]);
@@ -163,16 +165,20 @@ export default function IEC104Dashboard() {
   // 创建/开启连接
   const handleConnect = async (config) => {
     setConnections(prev => {
-      const exists = prev.some(c => c.id === config.id);
-      if (exists) {
-        return prev.map(c => c.id === config.id ? { ...c, ...config, status: 'CONNECTING', error: null } : c);
+      const existsIndex = prev.findIndex(c => c.id === config.id || (c.ip === config.ip && String(c.port) === String(config.port)));
+      if (existsIndex !== -1) {
+        const updated = [...prev];
+        const oldId = updated[existsIndex].id;
+        if (oldId !== config.id) {
+          window.api.iec104.disconnect(oldId).catch(() => {});
+        }
+        updated[existsIndex] = { ...updated[existsIndex], ...config, status: 'CONNECTING', error: null };
+        return updated;
       }
       return [...prev, { ...config, status: 'CONNECTING', error: null }];
     });
 
-    if (!activeConnId) {
-      setActiveConnId(config.id);
-    }
+    setActiveConnId(config.id);
     
     // 初始化该通道对应的数据容器
     setYxPoints(prev => {
@@ -334,26 +340,60 @@ export default function IEC104Dashboard() {
         connections={connections} 
         simRunning={simRunning} 
         activeConnId={activeConnId} 
-        onTabChange={setActiveTab}
-        activeTab={activeTab}
       />
+ 
+      {/* 顶部横向连接配置区 */}
+      {activeTab !== 'simulator' && (
+        <ConnectionManager 
+          connections={connections} 
+          activeConnId={activeConnId}
+          onConnect={handleConnect}
+          onDisconnect={handleDisconnect}
+          onDeleteConnection={handleDeleteConnection}
+          onSelectActive={setActiveConnId}
+        />
+      )}
 
-      {/* 下方主体展示区（左侧边栏管理连接 + 右侧工作台） */}
-      <main style={{ display: 'flex', flex: 1, minHeight: 0, padding: '16px', gap: '16px' }}>
+      {/* 子页面视图切换 Tabs */}
+      <div style={{
+        display: 'flex',
+        gap: '8px',
+        padding: '10px 16px',
+        background: 'var(--bg-card)',
+        borderBottom: '1px solid var(--border-color)',
+        flexShrink: 0
+      }}>
+        {[
+          { id: 'dashboard', label: '数据监控舱' },
+          { id: 'commands', label: '命令控制台' },
+          { id: 'traffic', label: '报文监听台' },
+          { id: 'simulator', label: '从站模拟器' }
+        ].map(t => (
+          <button 
+            key={t.id}
+            onClick={() => setActiveTab(t.id)} 
+            style={{
+              background: activeTab === t.id ? 'var(--color-primary)' : 'transparent',
+              border: 'none',
+              color: activeTab === t.id ? '#000' : 'var(--text-muted)',
+              padding: '6px 14px',
+              fontSize: '12px',
+              fontWeight: '600',
+              cursor: 'pointer',
+              borderRadius: '6px',
+              boxShadow: activeTab === t.id ? '0 0 8px var(--color-primary-glow)' : 'none',
+              transition: 'all 0.2s ease'
+            }}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {/* 下方主体展示区 */}
+      <main style={{ display: 'flex', flex: 1, minHeight: 0, padding: '16px' }}>
         
-        {/* 左侧：通道连接管理区 */}
-        <section style={{ width: '280px', display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
-          <ConnectionManager 
-            connections={connections} 
-            activeConnId={activeConnId}
-            onConnect={handleConnect}
-            onDisconnect={handleDisconnect}
-            onDeleteConnection={handleDeleteConnection}
-            onSelectActive={setActiveConnId}
-          />
-        </section>
-
-        {/* 右侧：主工作视区 */}
+        {/* 主工作视区 */}
         <section style={{ flex: 1, minWidth: 0, height: '100%' }}>
           {activeTab === 'dashboard' && (
             <MonitorDashboard 

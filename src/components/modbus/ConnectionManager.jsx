@@ -15,6 +15,8 @@ export default function ConnectionManager({ connections, activeConnId, onConnect
   const [interval, setInterval] = useState('1000');
 
   const [editingId, setEditingId] = useState(null);
+  const [selectedConfigIdx, setSelectedConfigIdx] = useState('');
+  const [editingConfigIdx, setEditingConfigIdx] = useState(null);
 
   const [savedConfigs, setSavedConfigs] = useState(() => {
     try {
@@ -36,25 +38,70 @@ export default function ConnectionManager({ connections, activeConnId, onConnect
       interval
     };
     
-    const exists = savedConfigs.some(c => 
-      c.name === newConfig.name &&
-      c.ip === newConfig.ip && 
-      c.port === newConfig.port && 
-      c.unitId === newConfig.unitId &&
-      c.fc === newConfig.fc &&
-      c.startAddr === newConfig.startAddr &&
-      c.quantity === newConfig.quantity &&
-      c.interval === newConfig.interval
-    );
-
-    if (!exists) {
-      const updated = [...savedConfigs, newConfig];
+    if (editingConfigIdx !== null) {
+      const updated = [...savedConfigs];
+      updated[editingConfigIdx] = newConfig;
       localStorage.setItem('modbus_saved_configs', JSON.stringify(updated));
       setSavedConfigs(updated);
+    } else {
+      const exists = savedConfigs.some(c => 
+        c.name === newConfig.name &&
+        c.ip === newConfig.ip && 
+        c.port === newConfig.port && 
+        c.unitId === newConfig.unitId &&
+        c.fc === newConfig.fc &&
+        c.startAddr === newConfig.startAddr &&
+        c.quantity === newConfig.quantity &&
+        c.interval === newConfig.interval
+      );
+
+      if (!exists) {
+        const updated = [...savedConfigs, newConfig];
+        localStorage.setItem('modbus_saved_configs', JSON.stringify(updated));
+        setSavedConfigs(updated);
+        // 自动选中新保存的配置
+        const newIdx = updated.length - 1;
+        setSelectedConfigIdx(newIdx.toString());
+        setEditingConfigIdx(newIdx);
+      }
     }
   };
 
-  const handleLoadConfig = (cfg) => {
+  const handleSaveAsNewConfig = () => {
+    const newConfig = {
+      name: name ? `${name}_副本` : `${ip}:${port}_副本`,
+      ip,
+      port: parseInt(port) || 502,
+      unitId: parseInt(unitId) !== undefined ? parseInt(unitId) : 1,
+      fc,
+      startAddr,
+      quantity,
+      interval
+    };
+    const updated = [...savedConfigs, newConfig];
+    localStorage.setItem('modbus_saved_configs', JSON.stringify(updated));
+    setSavedConfigs(updated);
+    // 自动选中新配置
+    const newIdx = updated.length - 1;
+    setSelectedConfigIdx(newIdx.toString());
+    setEditingConfigIdx(newIdx);
+    setName(newConfig.name);
+  };
+
+  const handleCancelConfigEdit = () => {
+    setEditingConfigIdx(null);
+    setSelectedConfigIdx('');
+    setName('');
+    setIp('127.0.0.1');
+    setPort('502');
+    setUnitId('1');
+    setFc('3');
+    setStartAddr('0');
+    setQuantity('10');
+    setInterval('1000');
+  };
+
+  const handleLoadConfig = (cfg, idx) => {
     setName(cfg.name || '');
     setIp(cfg.ip);
     setPort(cfg.port.toString());
@@ -63,13 +110,18 @@ export default function ConnectionManager({ connections, activeConnId, onConnect
     if (cfg.startAddr) setStartAddr(cfg.startAddr);
     if (cfg.quantity) setQuantity(cfg.quantity);
     if (cfg.interval) setInterval(cfg.interval);
+    setSelectedConfigIdx(idx.toString());
+    setEditingConfigIdx(parseInt(idx));
   };
 
-  const handleDeleteConfig = (e, index) => {
-    e.stopPropagation();
+  const handleDeleteConfig = (index) => {
     const updated = savedConfigs.filter((_, i) => i !== index);
     localStorage.setItem('modbus_saved_configs', JSON.stringify(updated));
     setSavedConfigs(updated);
+    setSelectedConfigIdx('');
+    if (editingConfigIdx === index) {
+      setEditingConfigIdx(null);
+    }
   };
 
   const handleStartEdit = (c) => {
@@ -81,30 +133,18 @@ export default function ConnectionManager({ connections, activeConnId, onConnect
     if (c.polls && c.polls.length > 0) {
       const firstPoll = c.polls[0];
       setFc(firstPoll.fc.toString());
-      setStartAddr(firstPoll.startAddress.toString());
+      setStartAddress(firstPoll.startAddress.toString());
       setQuantity(firstPoll.quantity.toString());
       setInterval(firstPoll.interval.toString());
     }
     setShowAdvanced(true);
-  };
-
-  const handleCancelEdit = () => {
-    setEditingId(null);
-    setName('');
-    setIp('127.0.0.1');
-    setPort('502');
-    setUnitId('1');
-    setFc('3');
-    setStartAddr('0');
-    setQuantity('10');
-    setInterval('1000');
+    setSelectedConfigIdx('');
   };
 
   const handleSubmit = (e) => {
     e.preventDefault();
     const id = editingId || `${ip}:${port}-${Date.now().toString(36).substr(-4)}`;
     
-    // 构造默认轮询配置
     const polls = [
       {
         fc: parseInt(fc),
@@ -124,73 +164,69 @@ export default function ConnectionManager({ connections, activeConnId, onConnect
       autoReconnect: true
     });
 
-    setEditingId(null); // Clear editing mode
+    setEditingId(null);
   };
 
+  const activeConnection = connections.find(c => c.id === activeConnId);
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', gap: '16px' }}>
-      {/* 新建/修改连接 */}
-      <form onSubmit={handleSubmit} className="glass-card" style={{ padding: '16px' }}>
-        <h3 style={{ fontSize: '14px', fontWeight: '600', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px', color: '#fff' }}>
-          <Network size={16} color="var(--color-primary)" />
-          {editingId ? '修改 Modbus TCP 主站通道' : '新建 Modbus TCP 主站通道'}
-        </h3>
-        
-        <div style={{ marginBottom: '8px' }}>
-          <label className="label-text">通道名称 (选填)</label>
-          <input 
-            type="text" 
-            className="input-field" 
-            value={name} 
-            onChange={e => setName(e.target.value)} 
-            placeholder="未填写时默认使用 IP:Port" 
-          />
-        </div>
-        
-        <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 0.8fr', gap: '8px', marginBottom: '8px' }}>
-          <div>
-            <label className="label-text">从站 IP 地址</label>
+    <div style={{
+      background: 'var(--bg-secondary)',
+      borderBottom: '1px solid var(--border-color)',
+      padding: '10px 16px',
+      display: 'flex',
+      flexDirection: 'column',
+      gap: '8px',
+      flexShrink: 0,
+      width: '100%'
+    }}>
+      {/* 第一行：主输入表单与连接按键 */}
+      <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '12px', width: '100%' }}>
+        <form onSubmit={handleSubmit} style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', flex: 1 }}>
+          
+          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+            <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>从站IP:</span>
             <input 
               type="text" 
               className="input-field" 
               value={ip} 
               onChange={e => setIp(e.target.value)} 
               placeholder="127.0.0.1" 
+              style={{ width: '105px', padding: '5px 8px', fontSize: '11.5px' }}
               required 
             />
-          </div>
-          <div>
-            <label className="label-text">端口号 (Port)</label>
+            <span style={{ color: 'var(--text-muted)' }}>:</span>
             <input 
               type="number" 
               className="input-field" 
               value={port} 
               onChange={e => setPort(e.target.value)} 
               placeholder="502" 
+              style={{ width: '50px', padding: '5px 6px', fontSize: '11.5px' }}
               required 
             />
           </div>
-        </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '12px' }}>
-          <div>
-            <label className="label-text">设备 Unit ID</label>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+            <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Unit ID:</span>
             <input 
               type="number" 
               className="input-field" 
               value={unitId} 
               onChange={e => setUnitId(e.target.value)} 
               placeholder="1" 
+              style={{ width: '42px', padding: '5px 6px', fontSize: '11.5px' }}
               required 
             />
           </div>
-          <div>
-            <label className="label-text">默认轮询功能码</label>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+            <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>功能码:</span>
             <select 
               className="input-field"
               value={fc}
               onChange={e => setFc(e.target.value)}
-              style={{ background: 'rgba(0,0,0,0.4)', color: '#fff' }}
+              style={{ width: '150px', padding: '4px', fontSize: '11.5px', background: 'rgba(0,0,0,0.4)', color: '#fff' }}
             >
               <option value="1">FC 01 - Read Coils (0xxxx)</option>
               <option value="2">FC 02 - Read Discrete Inputs (1xxxx)</option>
@@ -198,343 +234,236 @@ export default function ConnectionManager({ connections, activeConnId, onConnect
               <option value="4">FC 04 - Read Input Registers (3xxxx)</option>
             </select>
           </div>
-        </div>
 
-        {/* 轮询详细设定 */}
-        <div style={{ marginBottom: '12px' }}>
-          <button 
-            type="button"
-            onClick={() => setShowAdvanced(!showAdvanced)}
-            style={{
-              background: 'transparent',
-              border: 'none',
-              color: 'var(--text-muted)',
-              fontSize: '11px',
-              fontWeight: '600',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '4px',
-              padding: 0
-            }}
-          >
-            <Settings size={12} />
-            {showAdvanced ? '折叠数据轮询参数' : '展开数据轮询参数'}
-            {showAdvanced ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+            <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>别名:</span>
+            <input 
+              type="text" 
+              className="input-field" 
+              value={name} 
+              onChange={e => setName(e.target.value)} 
+              placeholder="选填别名" 
+              style={{ width: '100px', padding: '5px 8px', fontSize: '11.5px' }}
+            />
+          </div>
+
+          <button type="submit" className="btn btn-primary" style={{ padding: '4px 12px', fontSize: '11.5px' }}>
+            {editingId ? '保存修改' : '建立连接'}
           </button>
 
-          {showAdvanced && (
-            <div style={{ 
-              display: 'grid', 
-              gridTemplateColumns: '1fr 1fr 1.1fr', 
-              gap: '8px', 
-              marginTop: '10px',
-              padding: '10px',
-              background: 'rgba(0,0,0,0.15)',
-              borderRadius: '6px',
-              border: '1px solid rgba(255,255,255,0.02)',
-              alignItems: 'end'
-            }}>
-              <div>
-                <label className="label-text">起始地址</label>
-                <input type="number" className="input-field" value={startAddr} onChange={e => setStartAddr(e.target.value)} />
-              </div>
-              <div>
-                <label className="label-text">读取长度</label>
-                <input type="number" className="input-field" value={quantity} onChange={e => setQuantity(e.target.value)} />
-              </div>
-              <div>
-                <label className="label-text">扫描周期(ms)</label>
-                <input type="number" className="input-field" value={interval} onChange={e => setInterval(e.target.value)} />
-              </div>
+          {editingConfigIdx !== null ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <button 
+                type="button" 
+                onClick={handleSaveConfig} 
+                className="btn btn-primary" 
+                style={{ padding: '4px 8px', fontSize: '11.5px', display: 'flex', alignItems: 'center', gap: '3px', border: '1px solid var(--color-primary)' }}
+              >
+                <Edit2 size={12} />
+                保存修改
+              </button>
+              <button 
+                type="button" 
+                onClick={handleSaveAsNewConfig} 
+                className="btn btn-secondary" 
+                style={{ padding: '4px 8px', fontSize: '11.5px', display: 'flex', alignItems: 'center', gap: '3px' }}
+                title="保存为新的独立配置"
+              >
+                <Bookmark size={12} />
+                另存常用
+              </button>
+              <button 
+                type="button" 
+                onClick={handleCancelConfigEdit} 
+                className="btn btn-secondary" 
+                style={{ padding: '4px 6px', fontSize: '11.5px' }}
+                title="取消修改并清空表单"
+              >
+                取消
+              </button>
             </div>
-          )}
-        </div>
-
-        <div style={{ display: 'flex', gap: '8px' }}>
-          <button type="submit" className="btn btn-primary" style={{ flex: 1, gap: '6px' }}>
-            {editingId ? <Edit2 size={14} /> : <Plus size={14} />}
-            {editingId ? '保存并重连' : '连接并开始轮询'}
-          </button>
-          {editingId ? (
-            <button 
-              type="button" 
-              onClick={handleCancelEdit} 
-              className="btn btn-secondary"
-              style={{ padding: '8px 12px' }}
-            >
-              取消
-            </button>
           ) : (
             <button 
               type="button" 
               onClick={handleSaveConfig} 
-              className="btn btn-secondary"
-              style={{ padding: '8px 12px', display: 'flex', alignItems: 'center', gap: '4px' }}
-              title="保存当前输入为常用配置"
+              className="btn btn-secondary" 
+              style={{ padding: '4px 8px', fontSize: '11.5px', display: 'flex', alignItems: 'center', gap: '3px' }}
             >
-              <Bookmark size={14} />
-              保存配置
+              <Bookmark size={12} />
+              保存常用
+            </button>
+          )}
+
+          {/* 高级轮询参数开关 */}
+          <button 
+            type="button"
+            onClick={() => setShowAdvanced(!showAdvanced)}
+            className="btn btn-secondary"
+            style={{ padding: '4px 8px', fontSize: '11.5px', display: 'flex', alignItems: 'center', gap: '3px' }}
+          >
+            <Settings size={12} />
+            {showAdvanced ? '隐藏轮询参数' : '设定轮询参数'}
+            {showAdvanced ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+          </button>
+        </form>
+
+        {/* 常用配置 Dropdown */}
+        {savedConfigs.length > 0 && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '4px', borderLeft: '1px solid var(--border-color)', paddingLeft: '12px' }}>
+            <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>常用:</span>
+            <select 
+              value={selectedConfigIdx}
+              onChange={(e) => {
+                const val = e.target.value;
+                if (val !== "") {
+                  const cfg = savedConfigs[parseInt(val)];
+                  handleLoadConfig(cfg, val);
+                } else {
+                  setSelectedConfigIdx('');
+                }
+              }}
+              style={{ width: '120px', padding: '4px 6px', fontSize: '11.5px', background: 'var(--bg-secondary)', color: 'var(--text-main)', border: '1px solid var(--border-color)', borderRadius: '4px' }}
+            >
+              <option value="">-- 选择配置 --</option>
+              {savedConfigs.map((cfg, idx) => (
+                <option key={idx} value={idx}>{cfg.name || `${cfg.ip}:${cfg.port}`}</option>
+              ))}
+            </select>
+            {selectedConfigIdx !== '' && (
+              <button
+                type="button"
+                onClick={() => handleDeleteConfig(parseInt(selectedConfigIdx))}
+                style={{
+                  background: 'rgba(255, 56, 96, 0.15)',
+                  border: '1px solid rgba(255, 56, 96, 0.3)',
+                  color: 'var(--color-danger)',
+                  cursor: 'pointer',
+                  padding: '4px 6px',
+                  borderRadius: '4px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  transition: 'all 0.2s'
+                }}
+                title="删除此常用配置"
+              >
+                <Trash2 size={12} />
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* 活动连接 Dropdown 与实时状态显示 */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', borderLeft: '1px solid var(--border-color)', paddingLeft: '12px' }}>
+          <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>通道:</span>
+          <select 
+            value={activeConnId || ''}
+            onChange={(e) => {
+              if (e.target.value) {
+                onSelectActive(e.target.value);
+              }
+            }}
+            style={{ width: '135px', padding: '4px 6px', fontSize: '11.5px', background: 'var(--bg-secondary)', color: 'var(--text-main)', border: '1px solid var(--border-color)', borderRadius: '4px' }}
+          >
+            <option value="">-- 活动通道 ({connections.length}) --</option>
+            {connections.map(c => (
+              <option key={c.id} value={c.id}>
+                {c.name} ({c.status === 'CONNECTED' ? '已连接' : c.status === 'CONNECTING' ? '连接中' : '已断开'})
+              </option>
+            ))}
+          </select>
+
+          {/* 实时状态徽标 */}
+          {activeConnection && (
+            <div style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '5px',
+              padding: '3px 8px',
+              borderRadius: '4px',
+              fontSize: '11px',
+              fontWeight: '600',
+              background: activeConnection.status === 'CONNECTED' 
+                ? 'rgba(0, 184, 148, 0.12)' 
+                : activeConnection.status === 'CONNECTING'
+                ? 'rgba(255, 170, 0, 0.12)'
+                : 'rgba(255, 76, 76, 0.12)',
+              border: `1px solid ${
+                activeConnection.status === 'CONNECTED'
+                  ? 'rgba(0, 184, 148, 0.3)'
+                  : activeConnection.status === 'CONNECTING'
+                  ? 'rgba(255, 170, 0, 0.3)'
+                  : 'rgba(255, 76, 76, 0.3)'
+              }`,
+              color: activeConnection.status === 'CONNECTED'
+                ? 'var(--color-success)'
+                : activeConnection.status === 'CONNECTING'
+                ? 'var(--color-warning)'
+                : 'var(--color-danger)',
+              flexShrink: 0
+            }}>
+              <span style={{
+                width: '6px',
+                height: '6px',
+                borderRadius: '50%',
+                backgroundColor: activeConnection.status === 'CONNECTED'
+                  ? 'var(--color-success)'
+                  : activeConnection.status === 'CONNECTING'
+                  ? 'var(--color-warning)'
+                  : 'var(--color-danger)',
+                boxShadow: activeConnection.status === 'CONNECTED' ? '0 0 6px var(--color-success)' : 'none'
+              }} />
+              {activeConnection.status === 'CONNECTED' ? '已连接' : activeConnection.status === 'CONNECTING' ? '连接中' : '已断开'}
+            </div>
+          )}
+
+          {activeConnection && (
+            <button 
+              onClick={() => onDisconnect(activeConnection.id)} 
+              style={{ 
+                background: 'rgba(255, 56, 96, 0.15)', 
+                border: '1px solid rgba(255, 56, 96, 0.3)', 
+                color: 'var(--color-danger)', 
+                cursor: 'pointer', 
+                padding: '3px 8px', 
+                borderRadius: '4px', 
+                fontSize: '11px',
+                flexShrink: 0
+              }}
+            >
+              断开
             </button>
           )}
         </div>
-      </form>
+      </div>
 
-      {/* 已保存的配置列表 */}
-      {savedConfigs.length > 0 && (
-        <div className="glass-card" style={{ padding: '16px' }}>
-          <h3 style={{ fontSize: '13px', fontWeight: '600', marginBottom: '10px', color: 'var(--text-light)', display: 'flex', alignItems: 'center', gap: '6px', borderBottom: '1px solid var(--border-color)', paddingBottom: '6px' }}>
-            <Bookmark size={14} color="var(--color-primary)" />
-            已保存的常用配置 ({savedConfigs.length})
-          </h3>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '180px', overflowY: 'auto' }}>
-            {savedConfigs.map((cfg, idx) => (
-              <div 
-                key={idx} 
-                onClick={() => handleLoadConfig(cfg)}
-                className="saved-config-item"
-                style={{ 
-                  display: 'flex', 
-                  alignItems: 'center', 
-                  justifyContent: 'space-between', 
-                  padding: '8px 12px', 
-                  background: 'rgba(0,0,0,0.15)', 
-                  borderRadius: '6px', 
-                  border: '1px solid rgba(255,255,255,0.03)',
-                  cursor: 'pointer',
-                  transition: 'all 0.2s ease'
-                }}
-              >
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                  <span style={{ fontSize: '12.5px', fontWeight: '600', color: 'var(--text-main)' }}>
-                    {cfg.name || `${cfg.ip}:${cfg.port}`}
-                  </span>
-                  <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                    {cfg.name ? `${cfg.ip}:${cfg.port} | ` : ''}Unit ID: {cfg.unitId} | 功能码: FC{cfg.fc} (扫: {cfg.interval}ms)
-                  </span>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }} onClick={e => e.stopPropagation()}>
-                  <button 
-                    type="button" 
-                    onClick={() => {
-                      handleLoadConfig(cfg);
-                      const id = `${cfg.ip}:${cfg.port}-${Date.now().toString(36).substr(-4)}`;
-                      const polls = [
-                        {
-                          fc: parseInt(cfg.fc || '3'),
-                          startAddress: parseInt(cfg.startAddr || '0') || 0,
-                          quantity: parseInt(cfg.quantity || '10') || 1,
-                          interval: parseInt(cfg.interval || '1000') || 1000
-                        }
-                      ];
-                      onConnect({
-                        id,
-                        name: cfg.name || `${cfg.ip}:${cfg.port}`,
-                        ip: cfg.ip,
-                        port: cfg.port,
-                        unitId: cfg.unitId,
-                        polls,
-                        autoReconnect: true
-                      });
-                    }} 
-                    className="reconnect-btn"
-                    style={{
-                      background: 'rgba(0, 229, 255, 0.1)',
-                      border: '1px solid rgba(0, 229, 255, 0.2)',
-                      color: 'var(--color-primary)',
-                      cursor: 'pointer',
-                      padding: '3px 8px',
-                      borderRadius: '4px',
-                      fontSize: '11px',
-                      fontWeight: '600'
-                    }}
-                  >
-                    连接
-                  </button>
-                  <button 
-                    type="button" 
-                    onClick={(e) => handleDeleteConfig(e, idx)} 
-                    style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: '4px' }}
-                    className="delete-trash-btn"
-                  >
-                    <Trash2 size={13} />
-                  </button>
-                </div>
-              </div>
-            ))}
+      {/* 第二行：高级轮询参数 (展开时显示) */}
+      {showAdvanced && (
+        <div style={{ 
+          display: 'flex', 
+          alignItems: 'center', 
+          gap: '16px',
+          padding: '8px 12px',
+          background: 'rgba(0,0,0,0.15)',
+          borderRadius: '6px',
+          border: '1px solid rgba(255,255,255,0.02)',
+          marginTop: '4px',
+          animation: 'fadeIn 0.2s'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>起始地址:</span>
+            <input type="number" className="input-field" value={startAddr} onChange={e => setStartAddr(e.target.value)} style={{ width: '70px', padding: '4px 6px', fontSize: '11px' }} />
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>读取长度:</span>
+            <input type="number" className="input-field" value={quantity} onChange={e => setQuantity(e.target.value)} style={{ width: '70px', padding: '4px 6px', fontSize: '11px' }} />
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>扫描间隔(ms):</span>
+            <input type="number" className="input-field" value={interval} onChange={e => setInterval(e.target.value)} style={{ width: '80px', padding: '4px 6px', fontSize: '11px' }} />
           </div>
         </div>
       )}
-
-      {/* 通道实例列表 */}
-      <div className="glass-card" style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', padding: '16px' }}>
-        <h3 style={{ fontSize: '13px', fontWeight: '600', marginBottom: '12px', color: 'var(--text-light)', borderBottom: '1px solid var(--border-color)', paddingBottom: '8px' }}>
-          连接实例列表 ({connections.length})
-        </h3>
-        
-        {connections.length === 0 ? (
-          <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: '8px', color: 'var(--text-muted)', fontSize: '13px' }}>
-            <Network size={24} style={{ opacity: 0.3 }} />
-            <span>暂无连接，请先在上方创建</span>
-          </div>
-        ) : (
-          <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            {connections.map((c) => {
-              const isActive = c.id === activeConnId;
-              let statusText = '已断开';
-              let statusClass = 'inactive';
-              if (c.status === 'CONNECTED') {
-                statusText = '已连接';
-                statusClass = 'active';
-              } else if (c.status === 'CONNECTING') {
-                statusText = '连接中';
-                statusClass = 'warning';
-              } else if (c.status === 'RECONNECTING') {
-                statusText = '重连中';
-                statusClass = 'warning';
-              }
-
-              return (
-                <div 
-                  key={c.id}
-                  onClick={() => onSelectActive(c.id)}
-                  style={{
-                    padding: '10px 12px',
-                    borderRadius: '8px',
-                    background: isActive ? 'rgba(0, 229, 255, 0.08)' : 'rgba(0,0,0,0.15)',
-                    border: isActive ? '1px solid var(--color-primary-glow)' : '1px solid rgba(255,255,255,0.03)',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: '6px',
-                    transition: 'all 0.2s ease',
-                  }}
-                  className="connection-item"
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <span className={`status-dot ${statusClass}`} />
-                        <strong style={{ fontSize: '13.5px', color: isActive ? 'var(--color-primary)' : 'var(--text-main)' }}>
-                          {c.name || `${c.ip}:${c.port}`}
-                        </strong>
-                      </div>
-                      <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                        {c.name ? `${c.ip}:${c.port} | ` : ''}Unit ID: {c.unitId} | 状态: {statusText}
-                      </div>
-                    </div>
-                    
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }} onClick={(e) => e.stopPropagation()}>
-                      <button
-                        type="button"
-                        onClick={() => handleStartEdit(c)}
-                        style={{
-                          background: 'transparent',
-                          border: 'none',
-                          color: 'var(--text-muted)',
-                          cursor: 'pointer',
-                          padding: '4px',
-                          borderRadius: '4px',
-                          display: 'flex',
-                          alignItems: 'center',
-                          opacity: 0.8
-                        }}
-                        title="修改通道配置"
-                        className="edit-pencil-btn"
-                      >
-                        <Edit2 size={13} />
-                      </button>
-
-                      {c.status !== 'DISCONNECTED' ? (
-                        <button
-                          onClick={() => onDisconnect(c.id)}
-                          style={{
-                            background: 'rgba(255, 56, 96, 0.1)',
-                            border: '1px solid rgba(255, 56, 96, 0.2)',
-                            color: 'var(--color-danger)',
-                            cursor: 'pointer',
-                            padding: '3px 8px',
-                            borderRadius: '4px',
-                            fontSize: '11px',
-                            fontWeight: '600'
-                          }}
-                          className="disconnect-btn"
-                          title="仅断开连接，保留通道配置"
-                        >
-                          断开
-                        </button>
-                      ) : (
-                        <>
-                          <button
-                            onClick={() => onConnect(c)}
-                            style={{
-                              background: 'rgba(0, 229, 255, 0.1)',
-                              border: '1px solid rgba(0, 229, 255, 0.2)',
-                              color: 'var(--color-primary)',
-                              cursor: 'pointer',
-                              padding: '3px 8px',
-                              borderRadius: '4px',
-                              fontSize: '11px',
-                              fontWeight: '600'
-                            }}
-                            className="reconnect-btn"
-                          >
-                            重连
-                          </button>
-                          
-                          <button
-                            onClick={() => onDeleteConnection(c.id)}
-                            style={{
-                              background: 'transparent',
-                              border: 'none',
-                              color: 'var(--text-muted)',
-                              cursor: 'pointer',
-                              padding: '4px',
-                              borderRadius: '4px',
-                              display: 'flex',
-                              alignItems: 'center'
-                            }}
-                            className="delete-trash-btn"
-                            title="彻底删除通道配置"
-                          >
-                            <Trash2 size={14} />
-                          </button>
-                        </>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* 错误提示原因 */}
-                  {c.status === 'DISCONNECTED' && c.error && (
-                    <div style={{
-                      fontSize: '10.5px',
-                      color: 'var(--color-danger)',
-                      background: 'rgba(255, 56, 96, 0.08)',
-                      padding: '4px 8px',
-                      borderRadius: '4px',
-                      borderLeft: '2px solid var(--color-danger)',
-                      marginTop: '2px',
-                      wordBreak: 'break-all'
-                    }}>
-                      原因: {c.error}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
-
-      <style>{`
-        .connection-item:hover, .saved-config-item:hover {
-          background: rgba(0, 229, 255, 0.04) !important;
-          border-color: rgba(0, 229, 255, 0.2) !important;
-        }
-        .delete-btn:hover {
-          background: rgba(255,56,96,0.15);
-        }
-      `}</style>
     </div>
   );
 }

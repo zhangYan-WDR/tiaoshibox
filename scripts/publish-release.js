@@ -23,13 +23,13 @@ if (!TOKEN) {
 }
 
 const REPO = 'zhangYan-WDR/tiaoshibox';
-const TAG = 'v1.0.0';
+const TAG = 'v1.1.0';
 
 const assets = [
-  { name: '调试百宝箱-1.0.0-arm64.dmg', contentType: 'application/octet-stream' },
-  { name: '调试百宝箱 Setup 1.0.0.exe', contentType: 'application/octet-stream' },
-  { name: '调试百宝箱-1.0.0-win.zip', contentType: 'application/zip' },
-  { name: '调试百宝箱-1.0.0-arm64-win.zip', contentType: 'application/zip' }
+  { name: '调试百宝箱-1.1.0-arm64.dmg', contentType: 'application/octet-stream' },
+  { name: '调试百宝箱 Setup 1.1.0.exe', contentType: 'application/octet-stream' },
+  { name: '调试百宝箱-1.1.0-win.zip', contentType: 'application/zip' },
+  { name: '调试百宝箱-1.1.0-arm64-win.zip', contentType: 'application/zip' }
 ];
 
 const distDir = path.join(__dirname, '../dist-package');
@@ -150,7 +150,7 @@ async function run() {
       tag_name: TAG,
       target_commitish: 'main',
       name: TAG,
-      body: `### 调试百宝箱 v1.0.0 正式发布 🚀\n\n#### 🌟 核心特色与功能亮点\n* **Modbus TCP 调试舱**：支持主从站双向仿真，多寄存器读写监视与波形图分析。\n* **IEC 104 控制台**：符合标准电力规约，支持遥信、遥测、遥控及精准 SOE 毫秒级时标报文解析。\n* **IEC 61850 MMS 节点浏览与 GOOSE 传输**：IED 模型树状节点浏览、值监控写入，支持 GOOSE 组播发包/收包调试。\n* **套接字网络收发端**：定时循环发送，支持 ASCII/Hex 双十六进制数据双向收发。\n* **网络现场诊断**：内置高精度 Ping 以及 TCP 全局端口快速扫描探测。\n* **浮点与十六进制转换**：内置 IEEE 754 浮点转换与 CRC16/CheckSum 异或校验算法。\n\n#### 📦 编译产物下载\n* **macOS 平台 (Apple Silicon)**：\`调试百宝箱-1.0.0-arm64.dmg\`\n* **Windows 平台**：\`调试百宝箱 Setup 1.0.0.exe\` (安装包), \`调试百宝箱-1.0.0-arm64-win.zip\` (免安装便携版)`,
+      body: `### 调试百宝箱 v1.1.0 正式发布 🚀\n\n#### 🌟 核心特色与功能亮点\n* **OPC UA 调试舱 (NEW!)**：支持服务端点物理连接（支持安全策略加密与用户会话认证），地址空间分级懒加载树，变量属性读写修改与实时监控订阅变动。\n* **Modbus TCP 调试舱**：支持主从站双向仿真，多寄存器读写监视与波形图分析。\n* **IEC 104 控制台**：符合标准电力规约，支持遥信、遥测、遥控及精准 SOE 毫秒级时标报文解析。\n* **IEC 61850 MMS 节点浏览与 GOOSE 传输**：IED 模型树状节点浏览、值监控写入，支持 GOOSE 组播发包/收包调试。\n* **套接字网络收发端**：定时循环发送，支持 ASCII/Hex 双十六进制数据双向收发。\n* **网络现场诊断**：内置高精度 Ping 以及 TCP 全局端口快速扫描探测。\n* **数据计算宝箱**：内置 IEEE 754 浮点转换、Modbus 拼接解析与 CRC16/CheckSum 校验计算。\n\n#### 📦 编译产物下载\n* **macOS 平台 (Apple Silicon)**：\`调试百宝箱-1.1.0-arm64.dmg\`\n* **Windows 平台**：\`调试百宝箱 Setup 1.1.0.exe\` (安装包), \`调试百宝箱-1.1.0-win.zip\` (免安装便携版), \`调试百宝箱-1.1.0-arm64-win.zip\` (便携版)`,
       draft: false,
       prerelease: false
     });

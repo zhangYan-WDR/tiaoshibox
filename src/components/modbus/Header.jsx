@@ -38,32 +38,34 @@ export default function Header({ connections, simRunning, activeConnId, onTabCha
         </div>
       </div>
 
-      <nav style={{ display: 'flex', gap: '8px', WebkitAppRegion: 'no-drag' }}>
-        <button 
-          className={`tab-btn ${activeTab === 'dashboard' ? 'active' : ''}`}
-          onClick={() => onTabChange('dashboard')}
-        >
-          数值监控盘
-        </button>
-        <button 
-          className={`tab-btn ${activeTab === 'commands' ? 'active' : ''}`}
-          onClick={() => onTabChange('commands')}
-        >
-          主站命令台
-        </button>
-        <button 
-          className={`tab-btn ${activeTab === 'traffic' ? 'active' : ''}`}
-          onClick={() => onTabChange('traffic')}
-        >
-          通信监视器
-        </button>
-        <button 
-          className={`tab-btn ${activeTab === 'simulator' ? 'active' : ''}`}
-          onClick={() => onTabChange('simulator')}
-        >
-          从站模拟中心
-        </button>
-      </nav>
+      {onTabChange && (
+        <nav style={{ display: 'flex', gap: '8px', WebkitAppRegion: 'no-drag' }}>
+          <button 
+            className={`tab-btn ${activeTab === 'dashboard' ? 'active' : ''}`}
+            onClick={() => onTabChange('dashboard')}
+          >
+            数值监控盘
+          </button>
+          <button 
+            className={`tab-btn ${activeTab === 'commands' ? 'active' : ''}`}
+            onClick={() => onTabChange('commands')}
+          >
+            主站命令台
+          </button>
+          <button 
+            className={`tab-btn ${activeTab === 'traffic' ? 'active' : ''}`}
+            onClick={() => onTabChange('traffic')}
+          >
+            通信监视器
+          </button>
+          <button 
+            className={`tab-btn ${activeTab === 'simulator' ? 'active' : ''}`}
+            onClick={() => onTabChange('simulator')}
+          >
+            从站模拟中心
+          </button>
+        </nav>
+      )}
 
       <div style={{ display: 'flex', alignItems: 'center', gap: '16px', fontSize: '13px', WebkitAppRegion: 'no-drag' }}>
         <div className="status-badge">

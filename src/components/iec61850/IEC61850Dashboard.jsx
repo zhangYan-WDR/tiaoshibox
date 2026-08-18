@@ -293,7 +293,34 @@ export default function IEC61850Dashboard() {
         gooseSubRunning={gooseSubRunning}
       />
 
-      <div className="main-content">
+      {/* 顶部横向连接配置区 */}
+      <ConnectionManager
+        activeTab={activeTab}
+        mmsClientStatus={mmsClientStatus}
+        mmsClientIp={mmsClientIp}
+        setMmsClientIp={setMmsClientIp}
+        mmsClientPort={mmsClientPort}
+        setMmsClientPort={setMmsClientPort}
+        onMmsConnect={handleMmsConnect}
+        onMmsDisconnect={handleMmsDisconnect}
+        mmsServerActive={mmsServerActive}
+        mmsServerPort={mmsServerPort}
+        setMmsServerPort={setMmsServerPort}
+        onStartServer={handleStartServer}
+        onStopServer={handleStopServer}
+        goosePubRunning={goosePubRunning}
+        goosePubConfig={goosePubConfig}
+        setGoosePubConfig={setGoosePubConfig}
+        onStartGoosePub={handleStartGoosePub}
+        onStopGoosePub={handleStopGoosePub}
+        gooseSubRunning={gooseSubRunning}
+        gooseSubConfig={gooseSubConfig}
+        setGooseSubConfig={setGooseSubConfig}
+        onStartGooseSub={handleStartGooseSub}
+        onStopGooseSub={handleStopGooseSub}
+      />
+
+      <div className="main-content" style={{ display: 'flex', flex: 1, overflow: 'hidden', padding: '16px', gap: '16px' }}>
         
         {/* Left Hand SCL Node tree explorer (shown only in Client and Server tabs) */}
         {(activeTab === 'mms-client' || activeTab === 'mms-server') && (
@@ -310,34 +337,6 @@ export default function IEC61850Dashboard() {
 
         {/* Center Dashboard Workspace */}
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-          
-          {/* Top connection parameters */}
-          <ConnectionManager
-            activeTab={activeTab}
-            mmsClientStatus={mmsClientStatus}
-            mmsClientIp={mmsClientIp}
-            setMmsClientIp={setMmsClientIp}
-            mmsClientPort={mmsClientPort}
-            setMmsClientPort={setMmsClientPort}
-            onMmsConnect={handleMmsConnect}
-            onMmsDisconnect={handleMmsDisconnect}
-            mmsServerActive={mmsServerActive}
-            mmsServerPort={mmsServerPort}
-            setMmsServerPort={setMmsServerPort}
-            onStartServer={handleStartServer}
-            onStopServer={handleStopServer}
-            goosePubRunning={goosePubRunning}
-            goosePubConfig={goosePubConfig}
-            setGoosePubConfig={setGoosePubConfig}
-            onStartGoosePub={handleStartGoosePub}
-            onStopGoosePub={handleStopGoosePub}
-            gooseSubRunning={gooseSubRunning}
-            gooseSubConfig={gooseSubConfig}
-            setGooseSubConfig={setGooseSubConfig}
-            onStartGooseSub={handleStartGooseSub}
-            onStopGooseSub={handleStopGooseSub}
-          />
-
           {/* Main workspace table variables */}
           <MonitorDashboard
             activeTab={activeTab}
@@ -350,7 +349,6 @@ export default function IEC61850Dashboard() {
             onTogglePubDatasetItem={handleTogglePubDatasetItem}
             gooseSubscribersData={gooseSubscribersData}
           />
-
         </div>
 
         {/* Right Console Command Panel */}

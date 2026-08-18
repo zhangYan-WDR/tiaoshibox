@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 import Header from './Header';
 import ConnectionManager from './ConnectionManager';
 import MonitorDashboard from './MonitorDashboard';
@@ -9,6 +10,7 @@ import SimulatorConfig from './SimulatorConfig';
 export default function ModbusDashboard() {
   // 选项卡系统: 'dashboard' | 'commands' | 'traffic' | 'simulator'
   const [activeTab, setActiveTab] = useState('dashboard');
+  const [isConnCollapsed, setIsConnCollapsed] = useState(false);
   
   // 主站客户端通道管理
   const [connections, setConnections] = useState([]);
@@ -215,29 +217,61 @@ export default function ModbusDashboard() {
         connections={connections} 
         simRunning={simRunning} 
         activeConnId={activeConnId} 
-        activeTab={activeTab}
-        onTabChange={setActiveTab}
         simConnections={simConnections}
       />
+ 
+      {/* 顶部横向连接配置区 */}
+      {activeTab !== 'simulator' && (
+        <ConnectionManager 
+          connections={connections}
+          activeConnId={activeConnId}
+          onConnect={handleConnect}
+          onDisconnect={handleDisconnect}
+          onDeleteConnection={handleDeleteConnection}
+          onSelectActive={setActiveConnId}
+        />
+      )}
+
+      {/* 子页面视图切换 Tabs */}
+      <div style={{
+        display: 'flex',
+        gap: '8px',
+        padding: '10px 16px',
+        background: 'var(--bg-card)',
+        borderBottom: '1px solid var(--border-color)',
+        flexShrink: 0
+      }}>
+        {[
+          { id: 'dashboard', label: '数值监控盘' },
+          { id: 'commands', label: '主站命令台' },
+          { id: 'traffic', label: '通信监视器' },
+          { id: 'simulator', label: '从站模拟中心' }
+        ].map(t => (
+          <button 
+            key={t.id}
+            onClick={() => setActiveTab(t.id)} 
+            style={{
+              background: activeTab === t.id ? 'var(--color-primary)' : 'transparent',
+              border: 'none',
+              color: activeTab === t.id ? '#000' : 'var(--text-muted)',
+              padding: '6px 14px',
+              fontSize: '12px',
+              fontWeight: '600',
+              cursor: 'pointer',
+              borderRadius: '6px',
+              boxShadow: activeTab === t.id ? '0 0 8px var(--color-primary-glow)' : 'none',
+              transition: 'all 0.2s ease'
+            }}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
 
       {/* 下侧主工作区 */}
-      <div style={{ display: 'flex', flex: 1, overflow: 'hidden', padding: '16px', gap: '16px' }}>
+      <div style={{ display: 'flex', flex: 1, overflow: 'hidden', padding: '16px' }}>
         
-        {/* 左侧侧边栏：仅在非从站模拟中心显示，作为主站的多通道管理 */}
-        {activeTab !== 'simulator' && (
-          <div style={{ width: '300px', display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
-            <ConnectionManager 
-              connections={connections}
-              activeConnId={activeConnId}
-              onConnect={handleConnect}
-              onDisconnect={handleDisconnect}
-              onDeleteConnection={handleDeleteConnection}
-              onSelectActive={setActiveConnId}
-            />
-          </div>
-        )}
-
-        {/* 右侧：标签工作板 */}
+        {/* 标签工作板 */}
         <div style={{ flex: 1, minWidth: 0, height: '100%' }}>
           {activeTab === 'dashboard' && (
             <MonitorDashboard 

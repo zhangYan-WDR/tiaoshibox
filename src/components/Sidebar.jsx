@@ -1,65 +1,72 @@
 import React from 'react';
-import { Cpu, Layers, Activity, Server, Radio, Wrench, Binary, Network, Sun, Moon } from 'lucide-react';
+import { 
+  Cpu, 
+  Activity, 
+  Server, 
+  Radio, 
+  Wrench, 
+  Binary, 
+  Network, 
+  Sun, 
+  Moon, 
+  Globe 
+} from 'lucide-react';
 
 export default function Sidebar({ activeTab, setActiveTab, theme, setTheme }) {
   const menuItems = [
-    { id: 'modbus', label: 'Modbus TCP', desc: '主从站联调分析舱', icon: Cpu, color: 'var(--color-primary)' },
-    { id: 'iec104', label: 'IEC 104', desc: '电力遥信遥测控制台', icon: Activity, color: 'var(--color-success)' },
-    { id: 'iec61850', label: 'IEC 61850 Suite', desc: 'MMS节点浏览与GOOSE', icon: Server, color: '#f53b57' },
-    { id: 'socket', label: 'TCP/UDP 调试器', desc: '套接字网口收发端', icon: Radio, color: 'var(--color-warning)' },
-    { id: 'network', label: '网络诊断靶场', desc: 'Ping 与端口侦测诊断', icon: Network, color: '#38ef7d' },
-    { id: 'converter', label: '数据计算宝箱', desc: '浮点、进制与校验码', icon: Binary, color: '#a29bfe' }
+    { id: 'modbus', label: 'Modbus TCP', icon: Cpu, color: 'var(--color-primary)' },
+    { id: 'iec104', label: 'IEC 104', icon: Activity, color: 'var(--color-success)' },
+    { id: 'iec61850', label: 'IEC 61850 Suite', icon: Server, color: '#f53b57' },
+    { id: 'opcua', label: 'OPC UA', icon: Globe, color: '#00cec9' },
+    { id: 'socket', label: 'TCP/UDP 调试器', icon: Radio, color: 'var(--color-warning)' },
+    { id: 'network', label: '网络诊断靶场', icon: Network, color: '#38ef7d' },
+    { id: 'converter', label: '数据计算宝箱', icon: Binary, color: '#a29bfe' }
   ];
 
   return (
-    <aside style={{
-      width: '260px',
-      background: 'rgba(12, 14, 21, 0.9)',
-      borderRight: '1px solid var(--border-color)',
+    <header style={{
+      height: '56px',
+      background: theme === 'light' ? '#ffffff' : 'rgba(12, 14, 21, 0.95)',
+      borderBottom: `1px solid ${theme === 'light' ? '#e2e8f0' : 'var(--border-color)'}`,
+      boxShadow: theme === 'light' ? '0 1px 3px rgba(0, 0, 0, 0.04)' : 'none',
       display: 'flex',
-      flexDirection: 'column',
-      height: '100%',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      padding: '0 20px',
+      paddingLeft: '80px', // 为 macOS 左上角红绿灯留出安全间距
       userSelect: 'none',
-      WebkitAppRegion: 'drag'
+      WebkitAppRegion: 'drag', // 支持拖拽窗口
+      flexShrink: 0
     }}>
-      {/* Sidebar Header Title */}
-      <div style={{
-        padding: '36px 20px 20px 20px',
-        borderBottom: '1px solid var(--border-color)',
-        display: 'flex',
-        alignItems: 'center',
-        gap: '12px',
-        WebkitAppRegion: 'no-drag'
-      }}>
+      {/* 左侧：应用标识 */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', WebkitAppRegion: 'no-drag' }}>
         <div style={{
-          background: 'linear-gradient(135deg, var(--color-primary), #0052d4)',
-          padding: '8px',
-          borderRadius: '10px',
+          background: theme === 'light' ? 'linear-gradient(135deg, #0284c7, #0369a1)' : 'linear-gradient(135deg, var(--color-primary), #0052d4)',
+          padding: '6px',
+          borderRadius: '8px',
           display: 'flex',
           alignItems: 'center',
-          boxShadow: '0 0 15px var(--color-primary-glow)'
+          boxShadow: theme === 'light' ? '0 2px 6px rgba(2, 132, 199, 0.25)' : '0 0 10px var(--color-primary-glow)'
         }}>
-          <Wrench size={22} color="#000" strokeWidth={2.5} />
+          <Wrench size={16} color={theme === 'light' ? '#fff' : '#000'} strokeWidth={2.5} />
         </div>
         <div>
-          <h1 style={{ fontSize: '16px', fontWeight: '800', letterSpacing: '0.8px', color: '#fff', margin: 0 }}>
+          <h1 style={{ fontSize: '13px', fontWeight: '800', color: theme === 'light' ? '#0f172a' : '#fff', margin: 0, letterSpacing: '0.5px' }}>
             调试百宝箱
           </h1>
-          <span style={{ fontSize: '10px', color: 'var(--text-muted)', fontWeight: '600', display: 'block', marginTop: '2px' }}>
-            工控与网络现场联调舱
-          </span>
         </div>
       </div>
 
-      {/* Sidebar Menu Items */}
-      <nav style={{
-        flex: 1,
-        padding: '16px 12px',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '8px',
-        overflowY: 'auto',
-        WebkitAppRegion: 'no-drag'
+      {/* 中间：横向功能选择菜单 */}
+      <nav style={{ 
+        display: 'flex', 
+        gap: '6px', 
+        WebkitAppRegion: 'no-drag', 
+        flex: 1, 
+        justifyContent: 'center', 
+        margin: '0 16px',
+        overflowX: 'auto',
+        scrollbarWidth: 'none' // 隐藏滚动条
       }}>
         {menuItems.map((item) => {
           const Icon = item.icon;
@@ -72,128 +79,72 @@ export default function Sidebar({ activeTab, setActiveTab, theme, setTheme }) {
               style={{
                 display: 'flex',
                 alignItems: 'center',
-                gap: '12px',
-                padding: '12px 14px',
-                borderRadius: '8px',
+                gap: '8px',
+                padding: '6px 12px',
+                borderRadius: '6px',
                 cursor: 'pointer',
-                background: isActive ? 'rgba(255, 255, 255, 0.03)' : 'transparent',
-                border: `1px solid ${isActive ? 'rgba(0, 229, 255, 0.15)' : 'transparent'}`,
-                boxShadow: isActive ? 'inset 0 0 8px rgba(0, 229, 255, 0.03)' : 'none',
-                position: 'relative',
-                transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)'
+                background: isActive 
+                  ? (theme === 'light' ? '#f0f9ff' : 'rgba(255, 255, 255, 0.04)') 
+                  : 'transparent',
+                border: `1px solid ${isActive 
+                  ? (theme === 'light' ? '#bae6fd' : 'rgba(0, 229, 255, 0.15)') 
+                  : 'transparent'}`,
+                color: isActive 
+                  ? (theme === 'light' ? '#0284c7' : '#fff') 
+                  : 'var(--text-muted)',
+                transition: 'all 0.2s',
+                whiteSpace: 'nowrap'
               }}
-              className="sidebar-item"
+              className="top-nav-item"
             >
-              {/* Left indicator glow */}
-              {isActive && (
-                <div style={{
-                  position: 'absolute',
-                  left: '0',
-                  top: '12px',
-                  bottom: '12px',
-                  width: '3px',
-                  background: item.color,
-                  borderRadius: '0 4px 4px 0',
-                  boxShadow: `0 0 10px ${item.color}`
-                }} />
-              )}
-
-              <div style={{
-                color: isActive ? item.color : 'var(--text-muted)',
-                display: 'flex',
-                alignItems: 'center',
-                transition: 'color 0.2s'
-              }}>
-                <Icon size={20} strokeWidth={isActive ? 2.2 : 1.8} />
-              </div>
-
-              <div>
-                <div style={{
-                  fontSize: '13px',
-                  fontWeight: isActive ? '700' : '500',
-                  color: isActive ? '#fff' : 'var(--text-light)',
-                  transition: 'color 0.2s'
-                }}>
-                  {item.label}
-                </div>
-                <div style={{
-                  fontSize: '10px',
-                  color: isActive ? 'var(--text-muted)' : 'rgba(136, 146, 176, 0.6)',
-                  marginTop: '2px',
-                  fontWeight: '500'
-                }}>
-                  {item.desc}
-                </div>
-              </div>
+              <Icon size={14} color={isActive ? (theme === 'light' ? '#0284c7' : item.color) : 'var(--text-muted)'} strokeWidth={2.2} />
+              <span style={{ fontSize: '12px', fontWeight: isActive ? '700' : '500' }}>
+                {item.label}
+              </span>
             </div>
           );
         })}
       </nav>
 
-      {/* Theme Switcher */}
-      <div style={{
-        padding: '8px 20px',
-        display: 'flex',
-        justifyContent: 'center',
-        alignItems: 'center',
-        borderTop: '1px solid var(--border-color)',
-        WebkitAppRegion: 'no-drag'
-      }}>
+      {/* 右侧：主题切换与版本 */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '16px', WebkitAppRegion: 'no-drag' }}>
         <button
           onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
           style={{
-            width: '100%',
-            padding: '8px 12px',
-            background: 'rgba(255, 255, 255, 0.03)',
-            border: '1px solid var(--border-color)',
+            background: theme === 'light' ? '#f1f5f9' : 'transparent',
+            border: theme === 'light' ? '1px solid #e2e8f0' : 'none',
             borderRadius: '6px',
             color: 'var(--text-light)',
             cursor: 'pointer',
+            padding: '6px',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            gap: '8px',
-            fontSize: '12px',
-            fontWeight: '600',
             transition: 'all 0.2s'
           }}
           className="theme-toggle-btn"
+          title={theme === 'dark' ? '切换至浅色模式' : '切换至深色模式'}
         >
           {theme === 'dark' ? (
-            <>
-              <Sun size={14} color="var(--color-warning)" />
-              切换至 浅色模式
-            </>
+            <Sun size={15} color="var(--color-warning)" />
           ) : (
-            <>
-              <Moon size={14} color="var(--color-primary)" />
-              切换至 深色模式
-            </>
+            <Moon size={15} color="#0284c7" />
           )}
         </button>
-      </div>
-
-      {/* Sidebar Footer info */}
-      <div style={{
-        padding: '16px 20px',
-        borderTop: '1px solid var(--border-color)',
-        fontSize: '10px',
-        color: 'rgba(136, 146, 176, 0.4)',
-        textAlign: 'center',
-        fontWeight: '600'
-      }}>
-        Antigravity Studio v1.0.0
+        <span style={{ fontSize: '11px', color: theme === 'light' ? '#94a3b8' : 'rgba(136, 146, 176, 0.4)', fontWeight: '600', fontFamily: 'var(--font-mono)' }}>
+          v1.1.0
+        </span>
       </div>
 
       <style>{`
-        .sidebar-item:hover {
-          background: rgba(255, 255, 255, 0.015);
-          border-color: rgba(255, 255, 255, 0.02);
+        .top-nav-item:hover {
+          background: ${theme === 'light' ? '#f8fafc' : 'rgba(255, 255, 255, 0.02)'};
+          color: ${theme === 'light' ? '#0f172a' : '#fff'};
         }
-        .sidebar-item:active {
-          transform: scale(0.98);
+        .top-nav-item:active {
+          transform: scale(0.97);
         }
       `}</style>
-    </aside>
+    </header>
   );
 }
