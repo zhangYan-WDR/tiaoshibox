@@ -1,7 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-const https = require('https');
-const { execSync } = require('child_process');
+const { execSync, spawnSync } = require('child_process');
 
 // Retrieve token dynamically from environment or git credential helper to avoid leaks
 let TOKEN = process.env.GITHUB_TOKEN;
@@ -32,7 +31,6 @@ const assets = [
   { name: '调试百宝箱-1.1.0-arm64-win.zip', contentType: 'application/zip' }
 ];
 
-const { execSync, spawnSync } = require('child_process');
 const distDir = path.join(__dirname, '../dist-package');
 
 function request(options, body) {
@@ -69,21 +67,51 @@ function request(options, body) {
   }
 }
 
-async function uploadAssetWithRetry(uploadUrl, filePath, fileName, contentType, retries = 5) {
+async function uploadAssetWithRetry(releaseId, uploadUrl, filePath, fileName, contentType, retries = 5) {
   const cleanUrl = uploadUrl.replace(/\{\?name,label\}/, '') + `?name=${encodeURIComponent(fileName)}`;
+  const fileSize = fs.statSync(filePath).size;
+
+  // Check if asset already exists on this release
+  try {
+    const existingAssets = await request({
+      hostname: 'api.github.com',
+      path: `/repos/${REPO}/releases/${releaseId}/assets`,
+      method: 'GET'
+    });
+
+    if (Array.isArray(existingAssets)) {
+      const match = existingAssets.find(a => a.name === fileName);
+      if (match) {
+        if (match.state === 'uploaded' && match.size === fileSize) {
+          console.log(`Asset ${fileName} is already fully uploaded (${match.size} bytes). Skipping!`);
+          return match;
+        } else {
+          console.log(`Asset ${fileName} exists with size ${match.size} (expected ${fileSize}). Deleting existing asset ID ${match.id}...`);
+          await request({
+            hostname: 'api.github.com',
+            path: `/repos/${REPO}/releases/assets/${match.id}`,
+            method: 'DELETE'
+          });
+          await new Promise(r => setTimeout(r, 2000));
+        }
+      }
+    }
+  } catch (e) {
+    console.warn(`Could not verify existing assets: ${e.message}`);
+  }
   
   for (let i = 0; i < retries; i++) {
     try {
-      console.log(`Uploading ${fileName} via curl (Attempt ${i + 1}/${retries})...`);
+      console.log(`Uploading ${fileName} (${(fileSize / (1024 * 1024)).toFixed(1)} MB) via curl --http1.1 (Attempt ${i + 1}/${retries})...`);
       
-      const curlCmd = `curl -s -S --retry 3 --retry-delay 3 ` +
+      const curlCmd = `curl --http1.1 -s -S --retry 3 --retry-delay 3 ` +
         `-H "Authorization: token ${TOKEN}" ` +
         `-H "Content-Type: ${contentType}" ` +
         `-H "User-Agent: TiaoshiBox-Publisher" ` +
         `--data-binary @"${filePath}" ` +
         `"${cleanUrl}"`;
         
-      const output = execSync(curlCmd, { encoding: 'utf8', maxBuffer: 50 * 1024 * 1024, timeout: 600000 });
+      const output = execSync(curlCmd, { encoding: 'utf8', maxBuffer: 50 * 1024 * 1024, timeout: 900000 });
       let resp = {};
       try {
         resp = JSON.parse(output);
@@ -202,7 +230,7 @@ async function run() {
     for (const asset of assets) {
       const filePath = path.join(distDir, asset.name);
       if (fs.existsSync(filePath)) {
-        await uploadAssetWithRetry(uploadUrl, filePath, asset.name, asset.contentType);
+        await uploadAssetWithRetry(releaseData.id, uploadUrl, filePath, asset.name, asset.contentType);
       } else {
         console.warn(`Warning: Asset file not found: ${filePath}`);
       }
