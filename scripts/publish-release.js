@@ -32,71 +32,75 @@ const assets = [
   { name: '调试百宝箱-1.1.0-arm64-win.zip', contentType: 'application/zip' }
 ];
 
+const { execSync, spawnSync } = require('child_process');
 const distDir = path.join(__dirname, '../dist-package');
 
 function request(options, body) {
-  return new Promise((resolve, reject) => {
-    const req = https.request(options, (res) => {
-      let data = '';
-      res.on('data', chunk => data += chunk);
-      res.on('end', () => {
-        if (res.statusCode >= 200 && res.statusCode < 300) {
-          resolve(JSON.parse(data || '{}'));
-        } else {
-          reject(new Error(`Status: ${res.statusCode}, Body: ${data}`));
-        }
-      });
-    });
-    req.on('error', reject);
-    if (body) {
-      req.write(typeof body === 'string' ? body : JSON.stringify(body));
-    }
-    req.end();
-  });
+  const method = options.method || 'GET';
+  const url = `https://${options.hostname}${options.path}`;
+  const args = [
+    '-s', '-S',
+    '-X', method,
+    '-H', `Authorization: token ${TOKEN}`,
+    '-H', 'User-Agent: TiaoshiBox-Publisher',
+  ];
+  if (body) {
+    args.push('-H', 'Content-Type: application/json');
+    args.push('--data', '@-');
+  }
+  args.push(url);
+
+  const input = body ? (typeof body === 'string' ? body : JSON.stringify(body)) : undefined;
+  const result = spawnSync('curl', args, { input, encoding: 'utf8', maxBuffer: 20 * 1024 * 1024 });
+
+  if (result.error) {
+    throw result.error;
+  }
+  if (result.status !== 0) {
+    throw new Error(`curl exited with code ${result.status}: ${result.stderr}`);
+  }
+
+  const output = result.stdout.trim();
+  if (!output) return {};
+  try {
+    return JSON.parse(output);
+  } catch (e) {
+    return { raw: output };
+  }
 }
 
-async function uploadAssetWithRetry(uploadUrl, filePath, fileName, contentType, retries = 3) {
+async function uploadAssetWithRetry(uploadUrl, filePath, fileName, contentType, retries = 5) {
+  const cleanUrl = uploadUrl.replace(/\{\?name,label\}/, '') + `?name=${encodeURIComponent(fileName)}`;
+  
   for (let i = 0; i < retries; i++) {
     try {
-      console.log(`Uploading ${fileName} (Attempt ${i + 1}/${retries})...`);
-      const fileStats = fs.statSync(filePath);
-      const fileStream = fs.createReadStream(filePath);
+      console.log(`Uploading ${fileName} via curl (Attempt ${i + 1}/${retries})...`);
       
-      const cleanUrl = uploadUrl.replace(/\{\?name,label\}/, '') + `?name=${encodeURIComponent(fileName)}`;
-      const urlObj = new URL(cleanUrl);
-
-      await new Promise((resolve, reject) => {
-        const req = https.request({
-          hostname: urlObj.hostname,
-          path: urlObj.pathname + urlObj.search,
-          method: 'POST',
-          headers: {
-            'Authorization': `token ${TOKEN}`,
-            'User-Agent': 'TiaoshiBox-Publisher',
-            'Content-Type': contentType,
-            'Content-Length': fileStats.size
-          }
-        }, (res) => {
-          let data = '';
-          res.on('data', chunk => data += chunk);
-          res.on('end', () => {
-            if (res.statusCode === 201) {
-              console.log(`Successfully uploaded ${fileName}!`);
-              resolve(JSON.parse(data));
-            } else {
-              reject(new Error(`Status ${res.statusCode}: ${data}`));
-            }
-          });
-        });
-
-        req.on('error', reject);
-        fileStream.pipe(req);
-      });
-      return; // Succeeded!
+      const curlCmd = `curl -s -S --retry 3 --retry-delay 3 ` +
+        `-H "Authorization: token ${TOKEN}" ` +
+        `-H "Content-Type: ${contentType}" ` +
+        `-H "User-Agent: TiaoshiBox-Publisher" ` +
+        `--data-binary @"${filePath}" ` +
+        `"${cleanUrl}"`;
+        
+      const output = execSync(curlCmd, { encoding: 'utf8', maxBuffer: 50 * 1024 * 1024, timeout: 600000 });
+      let resp = {};
+      try {
+        resp = JSON.parse(output);
+      } catch (e) {
+        throw new Error(`Invalid response JSON: ${output.slice(0, 200)}`);
+      }
+      
+      if (resp.id || resp.state === 'uploaded') {
+        console.log(`Successfully uploaded ${fileName}! (Asset ID: ${resp.id})`);
+        return resp;
+      } else {
+        throw new Error(`Upload response error: ${JSON.stringify(resp)}`);
+      }
     } catch (err) {
       console.error(`Attempt ${i + 1} failed for ${fileName}:`, err.message);
       if (i === retries - 1) throw err;
-      await new Promise(resolve => setTimeout(resolve, 5000)); // Wait 5s before retry
+      await new Promise(resolve => setTimeout(resolve, 5000));
     }
   }
 }
