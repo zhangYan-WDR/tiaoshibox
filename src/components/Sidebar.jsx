@@ -132,7 +132,7 @@ export default function Sidebar({ activeTab, setActiveTab, theme, setTheme }) {
           )}
         </button>
         <span style={{ fontSize: '11px', color: theme === 'light' ? '#94a3b8' : 'rgba(136, 146, 176, 0.4)', fontWeight: '600', fontFamily: 'var(--font-mono)' }}>
-          v1.1.0
+          v1.1.1
         </span>
       </div>
 

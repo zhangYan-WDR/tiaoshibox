@@ -1,7 +1,101 @@
-const { Client } = require('ssh2');
 const fs = require('fs');
 const path = require('path');
 const EventEmitter = require('events');
+
+// Hook ssh2 key parser and dynamic packet rewriting for SSH User Certificates
+try {
+  const keyParser = require('ssh2/lib/protocol/keyParser.js');
+  const originalParseKey = keyParser.parseKey;
+  keyParser.parseKey = function(data, passphrase) {
+    const parsedKey = originalParseKey.call(this, data, passphrase);
+    if (parsedKey && !(parsedKey instanceof Error) && data && data.certBuffer) {
+      try {
+        parsedKey.type = data.certType;
+        parsedKey.getPublicSSH = () => data.certBuffer;
+      } catch (e) {
+        console.error('User cert hook: Failed to decorate private key:', e);
+      }
+    }
+    return parsedKey;
+  };
+
+  const utils = require('ssh2/lib/protocol/utils.js');
+  const originalConvertSignature = utils.convertSignature;
+  utils.convertSignature = function(signature, keyType) {
+    let mappedKeyType = keyType;
+    if (typeof keyType === 'string' && keyType.endsWith('-cert-v01@openssh.com')) {
+      mappedKeyType = keyType.replace('-cert-v01@openssh.com', '');
+    }
+    return originalConvertSignature.call(this, signature, mappedKeyType);
+  };
+
+  const originalSendPacket = utils.sendPacket;
+  utils.sendPacket = function(proto, packet, bypass) {
+    const allocStart = proto._packetRW.write.allocStart;
+    const pktType = packet ? packet[allocStart] : null;
+    
+    if (packet && pktType === 50 && !bypass) {
+      try {
+        let pos = allocStart + 1;
+        const readString = () => {
+          const len = packet.readUint32BE(pos);
+          pos += 4;
+          const str = packet.toString('utf8', pos, pos + len);
+          pos += len;
+          return { len, str, start: pos - len - 4 };
+        };
+        
+        const user = readString();
+        const service = readString();
+        const method = readString();
+        
+        if (method.str === 'publickey') {
+          const isSigned = packet[pos++];
+          if (isSigned === 1) {
+            const algo = readString();
+            const pubkey = readString();
+            
+            const sigBlockStart = pos;
+            const sigBlockLen = packet.readUint32BE(pos);
+            pos += 4;
+            
+            const sigAlgo = readString();
+            if (sigAlgo.str.endsWith('-cert-v01@openssh.com')) {
+              const newSigAlgo = sigAlgo.str.replace('-cert-v01@openssh.com', '');
+              const newSigAlgoLen = Buffer.byteLength(newSigAlgo);
+              
+              const sigBlobLen = packet.readUint32BE(pos);
+              const sigBlob = packet.slice(pos + 4, pos + 4 + sigBlobLen);
+              
+              const newSigBlock = Buffer.allocUnsafe(4 + newSigAlgoLen + 4 + sigBlobLen);
+              newSigBlock.writeUint32BE(newSigAlgoLen, 0);
+              newSigBlock.utf8Write(newSigAlgo, 4, newSigAlgoLen);
+              newSigBlock.writeUint32BE(sigBlobLen, 4 + newSigAlgoLen);
+              sigBlob.copy(newSigBlock, 4 + newSigAlgoLen + 4);
+              
+              const part1 = packet.slice(0, sigBlockStart);
+              const lenBuf = Buffer.allocUnsafe(4);
+              lenBuf.writeUint32BE(newSigBlock.length, 0);
+              
+              const newPacketBody = Buffer.concat([part1.slice(allocStart), lenBuf, newSigBlock]);
+              
+              const newPacket = proto._cipher.allocPacket(newPacketBody.length);
+              newPacket.set(newPacketBody, allocStart);
+              packet = newPacket;
+            }
+          }
+        }
+      } catch (e) {
+        // Silently ignore parsing errors for non-auth packets
+      }
+    }
+    return originalSendPacket.call(this, proto, packet, bypass);
+  };
+} catch (e) {
+  console.error('Failed to initialize user cert hooks:', e);
+}
+
+const { Client } = require('ssh2');
 
 class SSHManager extends EventEmitter {
   constructor() {
@@ -119,13 +213,23 @@ class SSHManager extends EventEmitter {
           connOptions.privateKey = config.privateKey;
         } else if (config.privateKeyPath) {
           try {
-            connOptions.privateKey = fs.readFileSync(config.privateKeyPath);
+            const pkBuffer = fs.readFileSync(config.privateKeyPath);
             const certPath = `${config.privateKeyPath}-cert.pub`;
             if (fs.existsSync(certPath)) {
-              connOptions.publicKey = fs.readFileSync(certPath);
+              try {
+                const certContent = fs.readFileSync(certPath, 'utf8');
+                const parts = certContent.trim().split(/\s+/);
+                if (parts.length >= 2) {
+                  pkBuffer.certBuffer = Buffer.from(parts[1], 'base64');
+                  pkBuffer.certType = parts[0];
+                }
+              } catch (certErr) {
+                console.error('Failed to parse user certificate:', certErr);
+              }
             }
+            connOptions.privateKey = pkBuffer;
           } catch (readErr) {
-            return reject(new Error(`无法读取私钥或证书文件: ${readErr.message}`));
+            return reject(new Error(`无法读取私钥文件: ${readErr.message}`));
           }
         }
         if (config.passphrase) {

@@ -22,13 +22,13 @@ if (!TOKEN) {
 }
 
 const REPO = 'zhangYan-WDR/tiaoshibox';
-const TAG = 'v1.1.0';
+const TAG = 'v1.1.1';
 
 const assets = [
-  { name: '调试百宝箱-1.1.0-arm64.dmg', contentType: 'application/octet-stream' },
-  { name: '调试百宝箱 Setup 1.1.0.exe', contentType: 'application/octet-stream' },
-  { name: '调试百宝箱-1.1.0-win.zip', contentType: 'application/zip' },
-  { name: '调试百宝箱-1.1.0-arm64-win.zip', contentType: 'application/zip' }
+  { name: '调试百宝箱-1.1.1-arm64.dmg', contentType: 'application/octet-stream' },
+  { name: '调试百宝箱 Setup 1.1.1.exe', contentType: 'application/octet-stream' },
+  { name: '调试百宝箱-1.1.1-win.zip', contentType: 'application/zip' },
+  { name: '调试百宝箱-1.1.1-arm64-win.zip', contentType: 'application/zip' }
 ];
 
 const distDir = path.join(__dirname, '../dist-package');
@@ -180,42 +180,34 @@ async function run() {
       }
     }, {
       tag_name: TAG,
-      target_commitish: 'main',
-      name: '调试百宝箱 v1.1.0 正式发布 🚀',
-      body: `### 调试百宝箱 v1.1.0 正式发布 🚀
+      target_commitish: '1.1.1',
+      name: '调试百宝箱 v1.1.1 正式发布 🚀',
+      body: `### 调试百宝箱 v1.1.1 正式发布 🚀
 
-调试百宝箱迎来重磅 v1.1.0 版本升级！本次更新全新上线了工业级 OPC UA 调试舱、全面重构了浅色模式的高质感视觉体验，并引入了双向自由拖拽分栏与通道状态实时指示体系。
+调试百宝箱发布 v1.1.1 版本升级！本次更新全新上线了工业级 **OPC UA 远程方法调用 (RPC / Method Invocation) 控制台**，全面支持工业现场脱扣告警读取/下发等各类复杂方法交互，并优化了全协议连接体验与操作流程！
 
 ---
 
 #### 🌟 核心功能与重大更新
 
-##### 1. 全新 OPC UA 工业级调试舱 (NEW!) 📡
-* **端点连接与安全认证**：支持标准 \`opc.tcp://\` 端点接入，全面支持 None / Sign / SignAndEncrypt 安全加密模式及匿名/账号密码认证；
-* **地址空间懒加载树**：支持层级化浏览 OPC UA 地址空间，具备亚像素物理级对齐的复选框插槽与高可视度层级连接虚线；
-* **实时数据监视舱**：支持 Ctrl / Cmd / Shift 范围多选点位批量添加，毫秒级数据订阅与时标变动跟踪；
-* **智能数据类型解析**：内置 OPC UA 标准类型字典与自定义枚举/结构体解析器（如 \`Enum (LcSysStatus_enum)\` 友好识别）；
-* **变量数值写入与控制**：支持快速弹出详情面板并向服务端执行变量修改与写入下发。
+##### 1. OPC UA 远程方法调用控制台 (RPC / Method Invocation) ⚡
+* **全对象方法寻址**：支持指定任意 **所属对象节点 (ObjectId)** 与 **目标方法节点 (MethodId)** 发起远程 RPC 方法调用；
+* **多类型参数灵活配置**：支持添加 0 ~ N 个输入参数，支持选择 \`String (含 JSON)\`、\`Int32\`、\`UInt32\`、\`Int16\`、\`UInt16\`、\`Float\`、\`Double\`、\`Boolean\`、\`Byte\` 等全标准 OPC UA 数据类型；
+* **无参调用一键直达**：对于读取型方法（如 \`trip_alarm_get\`），无需配置任何参数，一键秒级发起调用；
+* **JSON 智能解析与格式化**：参数输入支持一键格式化校验 JSON 语法；服务端返回的 JSON 数据自动以 Pretty 格式树状代码高亮展示，并提供一键复制返回值功能；
+* **树节点智能联动**：地址空间树自动识别 \`Method\` 类型节点，节点右侧提供快捷 \`[⚡调用]\` 按钮，点击自动带入方法节点；
+* **极简原生交互**：采用打字即消失的清爽占位符提示（Placeholder），告别冗余预设与界面负担。
 
-##### 2. 浅色模式 (Light Mode) 视觉美学全方位重构 🎨
-* **现代科技配色**：基于 Apple / Linear 现代设计语言，纯白卡片（#ffffff）搭配高对比度深青板岩黑（#0f172a / Slate 900），彻底解决浅色模式下文字发虚、发白的问题；
-* **组件原生无缝适配**：顶部导航栏、四大协议连接栏、点位表格与底部通信日志全面去除了硬编码深色背景，通透优雅。
-
-##### 3. 工作区双向自由拖拽分栏 (Draggable Splitters) 📐
-* **左侧侧边栏宽度自由拖拽**：支持在 180px ~ 600px 之间丝滑拖拽调整地址树宽度；
-* **底部报文日志高度自由拖拽**：支持在 80px ~ 500px 之间自由调整报文日志视野；
-* **状态持久化记忆**：自动将用户的布局尺寸偏好保存至本地。
-
-##### 4. 全协议连接控制与通道管理增强 ⚡
-* **通道实时状态徽标**：在 IEC 104、Modbus、OPC UA 通道栏新增带发光指示灯的状态徽标（🟢已连接 / 🟡连接中 / 🔴已断开）；
-* **智能通道去重与复用**：修改 ASDU 地址或规约参数时自动复用已有通道，彻底消除了重复幽灵通道；
-* **便捷通道维护**：已断开通道提供快捷「重连」与「🗑️ 移除通道」操作。
+##### 2. 全协议连接控制与界面交互细节优化 🎨
+* **连接状态实时感知**：IEC 104、Modbus、OPC UA 通道栏全量配备高亮动态呼吸徽标（🟢已连接 / 🟡连接中 / 🔴已断开）；
+* **通道去重与智能复用**：修改规约参数/ASDU 时就地重用通道，消除同名重复通道；
+* **浅色模式与拖拽分栏**：全面适配高对比度现代浅色主题，左侧地址树与底部报文日志支持双向自由拖拽调节并持久化记忆。
 
 ---
 
 #### 📦 下载与安装指南
-* **macOS 平台 (Apple Silicon M系列芯片)**：下载 \`调试百宝箱-1.1.0-arm64.dmg\`，双击打开并拖拽到 Applications 即可使用。
-* **Windows 平台**：下载 \`调试百宝箱 Setup 1.1.0.exe\`（一键安装包）或 \`调试百宝箱-1.1.0-win.zip\`（便携解压即用版）。`,
+* **macOS 平台 (Apple Silicon M系列芯片)**：下载 \`调试百宝箱-1.1.1-arm64.dmg\`，双击打开并拖拽到 Applications 即可使用。
+* **Windows 平台**：下载 \`调试百宝箱 Setup 1.1.1.exe\`（一键安装包）或 \`调试百宝箱-1.1.1-win.zip\`（便携解压即用版）。`,
       draft: false,
       prerelease: false
     });
