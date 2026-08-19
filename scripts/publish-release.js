@@ -121,7 +121,7 @@ async function uploadAssetWithRetry(releaseId, uploadUrl, filePath, fileName, fi
 
       console.log(`Uploading ${fileName} [${fileLabel}] (${(fileSize / (1024 * 1024)).toFixed(1)} MB) via curl --http1.1 (Attempt ${i + 1}/${retries})...`);
       
-      const curlCmd = `curl --http1.1 -s -S --retry 3 --retry-delay 3 ` +
+      const curlCmd = `curl --http1.1 -L -s -S --retry 3 --retry-delay 3 ` +
         `-X POST ` +
         `-H "Authorization: token ${TOKEN}" ` +
         `-H "Content-Type: ${contentType}" ` +
