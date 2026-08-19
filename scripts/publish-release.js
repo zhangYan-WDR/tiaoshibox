@@ -25,10 +25,30 @@ const REPO = 'zhangYan-WDR/tiaoshibox';
 const TAG = 'v1.1.1';
 
 const assets = [
-  { name: '调试百宝箱-1.1.1-arm64.dmg', contentType: 'application/octet-stream' },
-  { name: '调试百宝箱 Setup 1.1.1.exe', contentType: 'application/octet-stream' },
-  { name: '调试百宝箱-1.1.1-win.zip', contentType: 'application/zip' },
-  { name: '调试百宝箱-1.1.1-arm64-win.zip', contentType: 'application/zip' }
+  { 
+    file: '调试百宝箱-1.1.1-arm64.dmg',
+    name: 'debug-toolbox-1.1.1-arm64.dmg',
+    label: '调试百宝箱-1.1.1-arm64.dmg',
+    contentType: 'application/octet-stream' 
+  },
+  { 
+    file: '调试百宝箱 Setup 1.1.1.exe',
+    name: 'debug-toolbox-setup-1.1.1.exe',
+    label: '调试百宝箱 Setup 1.1.1.exe',
+    contentType: 'application/octet-stream' 
+  },
+  { 
+    file: '调试百宝箱-1.1.1-win.zip',
+    name: 'debug-toolbox-1.1.1-win.zip',
+    label: '调试百宝箱-1.1.1-win.zip',
+    contentType: 'application/zip' 
+  },
+  { 
+    file: '调试百宝箱-1.1.1-arm64-win.zip',
+    name: 'debug-toolbox-1.1.1-arm64-win.zip',
+    label: '调试百宝箱-1.1.1-arm64-win.zip',
+    contentType: 'application/zip' 
+  }
 ];
 
 const distDir = path.join(__dirname, '../dist-package');
@@ -70,7 +90,7 @@ function request(options, body) {
 const https = require('https');
 const { URL } = require('url');
 
-async function uploadAssetWithRetry(releaseId, uploadUrl, filePath, fileName, contentType, retries = 5) {
+async function uploadAssetWithRetry(releaseId, uploadUrl, filePath, fileName, fileLabel, contentType, retries = 5) {
   const fileSize = fs.statSync(filePath).size;
   const uploadEndpoint = uploadUrl.replace(/\{\?name,label\}/, '');
 
@@ -84,10 +104,10 @@ async function uploadAssetWithRetry(releaseId, uploadUrl, filePath, fileName, co
       });
 
       if (Array.isArray(existingAssets)) {
-        const match = existingAssets.find(a => a.name === fileName || a.name.includes(fileName.replace('调试百宝箱', '')));
+        const match = existingAssets.find(a => a.name === fileName || (fileLabel && a.label === fileLabel));
         if (match) {
           if (match.state === 'uploaded' && match.size === fileSize && match.name === fileName) {
-            console.log(`Asset ${fileName} is already fully uploaded (${match.size} bytes). Skipping!`);
+            console.log(`Asset ${fileName} (${fileLabel || ''}) is already fully uploaded (${match.size} bytes). Skipping!`);
             return match;
           } else {
             console.log(`Asset ${match.name} exists with state '${match.state}' / size ${match.size} (expected ${fileSize}). Deleting existing asset ID ${match.id}...`);
@@ -101,11 +121,14 @@ async function uploadAssetWithRetry(releaseId, uploadUrl, filePath, fileName, co
         }
       }
 
-      console.log(`Uploading ${fileName} (${(fileSize / (1024 * 1024)).toFixed(1)} MB) via Node.js HTTPS Stream (Attempt ${i + 1}/${retries})...`);
+      console.log(`Uploading ${fileName} [${fileLabel}] (${(fileSize / (1024 * 1024)).toFixed(1)} MB) via Node.js HTTPS Stream (Attempt ${i + 1}/${retries})...`);
       
       const resp = await new Promise((resolve, reject) => {
         const urlObj = new URL(uploadEndpoint);
         urlObj.searchParams.set('name', fileName);
+        if (fileLabel) {
+          urlObj.searchParams.set('label', fileLabel);
+        }
 
         const req = https.request({
           hostname: urlObj.hostname,
@@ -116,6 +139,8 @@ async function uploadAssetWithRetry(releaseId, uploadUrl, filePath, fileName, co
             'Authorization': `token ${TOKEN}`,
             'Content-Type': contentType,
             'Content-Length': fileSize,
+            'Accept': 'application/vnd.github+json',
+            'X-GitHub-Api-Version': '2022-11-28',
             'User-Agent': 'TiaoshiBox-Publisher'
           }
         }, (res) => {
@@ -220,9 +245,9 @@ async function run() {
     const uploadUrl = releaseData.upload_url;
 
     for (const asset of assets) {
-      const filePath = path.join(distDir, asset.name);
+      const filePath = path.join(distDir, asset.file);
       if (fs.existsSync(filePath)) {
-        await uploadAssetWithRetry(releaseData.id, uploadUrl, filePath, asset.name, asset.contentType);
+        await uploadAssetWithRetry(releaseData.id, uploadUrl, filePath, asset.name, asset.label, asset.contentType);
       } else {
         console.warn(`Warning: Asset file not found: ${filePath}`);
       }
