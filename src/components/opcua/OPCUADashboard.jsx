@@ -155,46 +155,12 @@ export default function OPCUADashboard() {
 
   // 方法调用控制台状态 (Method Invoker / RPC)
   const [showMethodModal, setShowMethodModal] = useState(false);
-  const [methodObjectId, setMethodObjectId] = useState('ns=0;i=50000');
-  const [methodId, setMethodId] = useState('ns=1;s=trip_alarm_get');
+  const [methodObjectId, setMethodObjectId] = useState('');
+  const [methodId, setMethodId] = useState('');
   const [methodInputArgs, setMethodInputArgs] = useState([]);
   const [isCallingMethod, setIsCallingMethod] = useState(false);
   const [methodResult, setMethodResult] = useState(null);
-  const [selectedMethodPreset, setSelectedMethodPreset] = useState('get_trip_alarm');
   const [copiedArgIndex, setCopiedArgIndex] = useState(null);
-
-  // 内置常用方法模板
-  const defaultMethodPresets = [
-    {
-      id: 'get_trip_alarm',
-      name: '⚡ [预设] 脱扣告警读取 (trip_alarm_get)',
-      objectId: 'ns=0;i=50000',
-      methodId: 'ns=1;s=trip_alarm_get',
-      inputArguments: []
-    },
-    {
-      id: 'set_trip_alarm',
-      name: '⚡ [预设] 脱扣告警下发设置 (trip_alarm_set)',
-      objectId: 'ns=0;i=50000',
-      methodId: 'ns=1;s=trip_alarm_set',
-      inputArguments: [
-        {
-          id: 'arg_1',
-          dataType: 'String',
-          value: '{"tags":["PCS.Tag1","BAU.Tag2"]}'
-        }
-      ]
-    }
-  ];
-
-  const [savedMethodPresets, setSavedMethodPresets] = useState(() => {
-    try {
-      const stored = JSON.parse(localStorage.getItem('opcua_method_presets') || '[]');
-      return [...defaultMethodPresets, ...stored.filter(s => !defaultMethodPresets.some(d => d.id === s.id))];
-    } catch (e) {
-      return defaultMethodPresets;
-    }
-  });
 
   // 报文日志状态
   const [trafficLogs, setTrafficLogs] = useState([]);
@@ -687,18 +653,6 @@ export default function OPCUADashboard() {
     setLastClickedTableIndex(idx);
   };
 
-  // 方法调用：应用预设模板
-  const handleApplyMethodPreset = (presetId) => {
-    setSelectedMethodPreset(presetId);
-    const preset = savedMethodPresets.find(p => p.id === presetId);
-    if (preset) {
-      setMethodObjectId(preset.objectId);
-      setMethodId(preset.methodId);
-      setMethodInputArgs(JSON.parse(JSON.stringify(preset.inputArguments || [])));
-      setMethodResult(null);
-    }
-  };
-
   // 方法调用：添加输入参数
   const handleAddMethodInputArg = () => {
     const newArg = {
@@ -737,41 +691,6 @@ export default function OPCUADashboard() {
       }
       return arg;
     }));
-  };
-
-  // 方法调用：保存当前配置为常用方法预设
-  const handleSaveMethodPreset = () => {
-    const presetName = prompt('请输入新方法预设名称 (例如: 脱扣告警自定义):', `自定义方法 (${methodId.split(';').pop() || 'RPC'})`);
-    if (!presetName || !presetName.trim()) return;
-
-    const newPreset = {
-      id: `preset_${Date.now()}`,
-      name: `⚡ ${presetName.trim()}`,
-      objectId: methodObjectId.trim(),
-      methodId: methodId.trim(),
-      inputArguments: JSON.parse(JSON.stringify(methodInputArgs))
-    };
-
-    const nextPresets = [...savedMethodPresets, newPreset];
-    setSavedMethodPresets(nextPresets);
-    setSelectedMethodPreset(newPreset.id);
-    try {
-      localStorage.setItem('opcua_method_presets', JSON.stringify(nextPresets.filter(p => !defaultMethodPresets.some(d => d.id === p.id))));
-    } catch (e) {}
-  };
-
-  // 方法调用：删除常用方法预设
-  const handleDeleteMethodPreset = (presetId) => {
-    if (defaultMethodPresets.some(d => d.id === presetId)) {
-      alert('系统内置预设无法删除');
-      return;
-    }
-    const nextPresets = savedMethodPresets.filter(p => p.id !== presetId);
-    setSavedMethodPresets(nextPresets);
-    setSelectedMethodPreset('get_trip_alarm');
-    try {
-      localStorage.setItem('opcua_method_presets', JSON.stringify(nextPresets.filter(p => !defaultMethodPresets.some(d => d.id === p.id))));
-    } catch (e) {}
   };
 
   // 方法调用：执行 RPC 调用
@@ -1004,8 +923,10 @@ export default function OPCUADashboard() {
             <button
               onClick={(e) => {
                 e.stopPropagation();
-                setMethodObjectId('ns=0;i=50000');
+                setMethodObjectId(node.parent || '');
                 setMethodId(node.nodeId);
+                setMethodInputArgs([]);
+                setMethodResult(null);
                 setShowMethodModal(true);
               }}
               style={{
@@ -1881,70 +1802,6 @@ export default function OPCUADashboard() {
             {/* 可滚动表单区域 */}
             <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '14px', paddingRight: '4px' }}>
               
-              {/* 常用模板与预设选择栏 */}
-              <div style={{ 
-                display: 'flex', 
-                alignItems: 'center', 
-                justifyContent: 'space-between', 
-                background: 'var(--bg-secondary)', 
-                padding: '8px 12px', 
-                borderRadius: '8px',
-                border: '1px solid var(--border-color)',
-                flexWrap: 'wrap',
-                gap: '8px'
-              }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <span style={{ fontSize: '12px', color: 'var(--text-muted)', fontWeight: '600' }}>常用模板:</span>
-                  <select 
-                    value={selectedMethodPreset}
-                    onChange={(e) => handleApplyMethodPreset(e.target.value)}
-                    style={{ 
-                      padding: '4px 8px', 
-                      fontSize: '12px', 
-                      background: 'var(--bg-card)', 
-                      color: 'var(--text-light)', 
-                      border: '1px solid var(--border-color)', 
-                      borderRadius: '4px',
-                      maxWidth: '280px'
-                    }}
-                  >
-                    {savedMethodPresets.map(preset => (
-                      <option key={preset.id} value={preset.id}>{preset.name}</option>
-                    ))}
-                  </select>
-                </div>
-
-                <div style={{ display: 'flex', gap: '6px' }}>
-                  <button 
-                    type="button" 
-                    onClick={handleSaveMethodPreset}
-                    className="btn btn-secondary"
-                    style={{ padding: '3px 8px', fontSize: '11.5px', display: 'flex', alignItems: 'center', gap: '4px' }}
-                    title="将当前对象、方法与输入参数保存为新预设"
-                  >
-                    <Bookmark size={12} />
-                    另存预设
-                  </button>
-                  {!defaultMethodPresets.some(d => d.id === selectedMethodPreset) && (
-                    <button 
-                      type="button" 
-                      onClick={() => handleDeleteMethodPreset(selectedMethodPreset)}
-                      className="btn"
-                      style={{ 
-                        padding: '3px 8px', 
-                        fontSize: '11.5px', 
-                        background: 'rgba(255, 56, 96, 0.15)', 
-                        color: 'var(--color-danger)', 
-                        border: '1px solid rgba(255, 56, 96, 0.3)' 
-                      }}
-                      title="删除当前自定义预设"
-                    >
-                      <Trash2 size={12} />
-                    </button>
-                  )}
-                </div>
-              </div>
-
               {/* 对象节点与方法节点输入 */}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
@@ -1956,11 +1813,11 @@ export default function OPCUADashboard() {
                     className="input-field" 
                     value={methodObjectId} 
                     onChange={e => setMethodObjectId(e.target.value)} 
-                    placeholder="如 ns=0;i=50000 或 ns=0;i=85" 
-                    style={{ fontSize: '12px', padding: '6px 8px', fontFamily: 'var(--font-mono)' }} 
+                    placeholder="例如: ns=0;i=50000 (所属父对象节点)" 
+                    style={{ fontSize: '12px', padding: '7px 10px', fontFamily: 'var(--font-mono)' }} 
                     required 
                   />
-                  <span style={{ fontSize: '10.5px', color: 'var(--text-muted)' }}>方法所属的父对象节点 ID</span>
+                  <span style={{ fontSize: '10.5px', color: 'var(--text-muted)' }}>方法所属的父对象节点 ID (如 ns=0;i=50000 或 ns=0;i=85)</span>
                 </div>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
@@ -1972,11 +1829,11 @@ export default function OPCUADashboard() {
                     className="input-field" 
                     value={methodId} 
                     onChange={e => setMethodId(e.target.value)} 
-                    placeholder="如 ns=1;s=trip_alarm_get" 
-                    style={{ fontSize: '12px', padding: '6px 8px', fontFamily: 'var(--font-mono)' }} 
+                    placeholder="例如: ns=1;s=trip_alarm_get 或 ns=1;s=trip_alarm_set" 
+                    style={{ fontSize: '12px', padding: '7px 10px', fontFamily: 'var(--font-mono)' }} 
                     required 
                   />
-                  <span style={{ fontSize: '10.5px', color: 'var(--text-muted)' }}>待调用的方法节点 NodeId</span>
+                  <span style={{ fontSize: '10.5px', color: 'var(--text-muted)' }}>待执行调用的方法节点 NodeId</span>
                 </div>
               </div>
 
