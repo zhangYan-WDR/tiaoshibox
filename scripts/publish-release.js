@@ -67,10 +67,12 @@ function request(options, body) {
   }
 }
 
+const https = require('https');
+const { URL } = require('url');
+
 async function uploadAssetWithRetry(releaseId, uploadUrl, filePath, fileName, contentType, retries = 5) {
-  const uploadEndpoint = uploadUrl.replace(/\{\?name,label\}/, '');
-  const targetUrl = `${uploadEndpoint}?name=${encodeURIComponent(fileName)}`;
   const fileSize = fs.statSync(filePath).size;
+  const uploadEndpoint = uploadUrl.replace(/\{\?name,label\}/, '');
 
   for (let i = 0; i < retries; i++) {
     try {
@@ -99,39 +101,51 @@ async function uploadAssetWithRetry(releaseId, uploadUrl, filePath, fileName, co
         }
       }
 
-      console.log(`Uploading ${fileName} (${(fileSize / (1024 * 1024)).toFixed(1)} MB) via curl --http1.1 (Attempt ${i + 1}/${retries})...`);
+      console.log(`Uploading ${fileName} (${(fileSize / (1024 * 1024)).toFixed(1)} MB) via Node.js HTTPS Stream (Attempt ${i + 1}/${retries})...`);
       
-      const curlArgs = [
-        '--http1.1',
-        '-L',
-        '-X', 'POST',
-        '-s', '-S',
-        '--retry', '3',
-        '--retry-delay', '3',
-        '-H', `Authorization: token ${TOKEN}`,
-        '-H', `Content-Type: ${contentType}`,
-        '-H', 'User-Agent: TiaoshiBox-Publisher',
-        '--data-binary', `@${filePath}`,
-        targetUrl
-      ];
-        
-      const result = spawnSync('curl', curlArgs, { encoding: 'utf8', maxBuffer: 50 * 1024 * 1024, timeout: 900000 });
-      if (result.error) throw result.error;
-      if (result.status !== 0) throw new Error(`curl exited with code ${result.status}: ${result.stderr}`);
+      const resp = await new Promise((resolve, reject) => {
+        const urlObj = new URL(uploadEndpoint);
+        urlObj.searchParams.set('name', fileName);
 
-      let resp = {};
-      try {
-        resp = JSON.parse(result.stdout.trim());
-      } catch (e) {
-        throw new Error(`Invalid response JSON: ${result.stdout.slice(0, 200)}`);
-      }
+        const req = https.request({
+          hostname: urlObj.hostname,
+          port: 443,
+          path: `${urlObj.pathname}?${urlObj.searchParams.toString()}`,
+          method: 'POST',
+          headers: {
+            'Authorization': `token ${TOKEN}`,
+            'Content-Type': contentType,
+            'Content-Length': fileSize,
+            'User-Agent': 'TiaoshiBox-Publisher'
+          }
+        }, (res) => {
+          let data = '';
+          res.on('data', chunk => { data += chunk; });
+          res.on('end', () => {
+            try {
+              const json = JSON.parse(data);
+              if (res.statusCode >= 200 && res.statusCode < 300) {
+                resolve(json);
+              } else {
+                reject(new Error(`Upload HTTP ${res.statusCode}: ${JSON.stringify(json)}`));
+              }
+            } catch (e) {
+              reject(new Error(`Upload HTTP ${res.statusCode}: ${data.slice(0, 300)}`));
+            }
+          });
+        });
+
+        req.on('error', reject);
+        req.setTimeout(600000, () => {
+          req.destroy(new Error('Upload timeout (10m)'));
+        });
+
+        const fileStream = fs.createReadStream(filePath, { highWaterMark: 1024 * 1024 });
+        fileStream.pipe(req);
+      });
       
-      if (resp.id || resp.state === 'uploaded') {
-        console.log(`Successfully uploaded ${fileName}! (Asset ID: ${resp.id})`);
-        return resp;
-      } else {
-        throw new Error(`Upload response error: ${JSON.stringify(resp)}`);
-      }
+      console.log(`Successfully uploaded ${fileName}! (Asset ID: ${resp.id})`);
+      return resp;
     } catch (err) {
       console.error(`Attempt ${i + 1} failed for ${fileName}:`, err.message);
       if (i === retries - 1) throw err;
