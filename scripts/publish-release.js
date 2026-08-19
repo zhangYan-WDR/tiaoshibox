@@ -71,40 +71,36 @@ async function uploadAssetWithRetry(releaseId, uploadUrl, filePath, fileName, co
   const cleanUrl = uploadUrl.replace(/\{\?name,label\}/, '') + `?name=${encodeURIComponent(fileName)}`;
   const fileSize = fs.statSync(filePath).size;
 
-  // Check if asset already exists on this release
-  try {
-    const existingAssets = await request({
-      hostname: 'api.github.com',
-      path: `/repos/${REPO}/releases/${releaseId}/assets`,
-      method: 'GET'
-    });
-
-    if (Array.isArray(existingAssets)) {
-      const match = existingAssets.find(a => a.name === fileName);
-      if (match) {
-        if (match.state === 'uploaded' && match.size === fileSize) {
-          console.log(`Asset ${fileName} is already fully uploaded (${match.size} bytes). Skipping!`);
-          return match;
-        } else {
-          console.log(`Asset ${fileName} exists with size ${match.size} (expected ${fileSize}). Deleting existing asset ID ${match.id}...`);
-          await request({
-            hostname: 'api.github.com',
-            path: `/repos/${REPO}/releases/assets/${match.id}`,
-            method: 'DELETE'
-          });
-          await new Promise(r => setTimeout(r, 2000));
-        }
-      }
-    }
-  } catch (e) {
-    console.warn(`Could not verify existing assets: ${e.message}`);
-  }
-  
   for (let i = 0; i < retries; i++) {
     try {
+      // Check if asset already exists on this release
+      const existingAssets = await request({
+        hostname: 'api.github.com',
+        path: `/repos/${REPO}/releases/${releaseId}/assets`,
+        method: 'GET'
+      });
+
+      if (Array.isArray(existingAssets)) {
+        const match = existingAssets.find(a => a.name === fileName);
+        if (match) {
+          if (match.state === 'uploaded' && match.size === fileSize) {
+            console.log(`Asset ${fileName} is already fully uploaded (${match.size} bytes). Skipping!`);
+            return match;
+          } else {
+            console.log(`Asset ${fileName} exists with state '${match.state}' / size ${match.size} (expected ${fileSize}). Deleting existing asset ID ${match.id}...`);
+            await request({
+              hostname: 'api.github.com',
+              path: `/repos/${REPO}/releases/assets/${match.id}`,
+              method: 'DELETE'
+            });
+            await new Promise(r => setTimeout(r, 2000));
+          }
+        }
+      }
+
       console.log(`Uploading ${fileName} (${(fileSize / (1024 * 1024)).toFixed(1)} MB) via curl --http1.1 (Attempt ${i + 1}/${retries})...`);
       
-      const curlCmd = `curl --http1.1 -L -s -S --retry 3 --retry-delay 3 ` +
+      const curlCmd = `curl --http1.1 -X POST -s -S --retry 3 --retry-delay 3 ` +
         `-H "Authorization: token ${TOKEN}" ` +
         `-H "Content-Type: ${contentType}" ` +
         `-H "User-Agent: TiaoshiBox-Publisher" ` +
@@ -139,46 +135,28 @@ async function run() {
     
     // Check if release already exists
     try {
-      console.log('Checking for existing release to delete...');
-      releaseData = await request({
+      console.log('Checking for existing release...');
+      const existing = await request({
         hostname: 'api.github.com',
         path: `/repos/${REPO}/releases/tags/${TAG}`,
-        method: 'GET',
-        headers: {
-          'Authorization': `token ${TOKEN}`,
-          'User-Agent': 'TiaoshiBox-Publisher'
-        }
+        method: 'GET'
       });
       
-      if (releaseData && releaseData.id) {
-        console.log(`Release exists (ID: ${releaseData.id}). Deleting it to avoid conflicts...`);
-        await request({
-          hostname: 'api.github.com',
-          path: `/repos/${REPO}/releases/${releaseData.id}`,
-          method: 'DELETE',
-          headers: {
-            'Authorization': `token ${TOKEN}`,
-            'User-Agent': 'TiaoshiBox-Publisher'
-          }
-        });
-        console.log('Successfully deleted existing release. Waiting 3 seconds for propagation...');
-        await new Promise(r => setTimeout(r, 3000));
+      if (existing && existing.id) {
+        console.log(`Found existing release (ID: ${existing.id}). Reusing it!`);
+        releaseData = existing;
       }
     } catch (e) {
-      console.log('No existing release found. Creating a fresh one...');
+      console.log('No existing release found. Will create a fresh one.');
     }
 
-    console.log('Creating fresh GitHub release...');
-    releaseData = await request({
-      hostname: 'api.github.com',
-      path: `/repos/${REPO}/releases`,
-      method: 'POST',
-      headers: {
-        'Authorization': `token ${TOKEN}`,
-        'User-Agent': 'TiaoshiBox-Publisher',
-        'Content-Type': 'application/json'
-      }
-    }, {
+    if (!releaseData) {
+      console.log('Creating fresh GitHub release...');
+      releaseData = await request({
+        hostname: 'api.github.com',
+        path: `/repos/${REPO}/releases`,
+        method: 'POST'
+      }, {
       tag_name: TAG,
       target_commitish: '1.1.1',
       name: '调试百宝箱 v1.1.1 正式发布 🚀',
