@@ -87,12 +87,10 @@ function request(options, body) {
   }
 }
 
-const https = require('https');
-const { URL } = require('url');
-
 async function uploadAssetWithRetry(releaseId, uploadUrl, filePath, fileName, fileLabel, contentType, retries = 5) {
   const fileSize = fs.statSync(filePath).size;
   const uploadEndpoint = uploadUrl.replace(/\{\?name,label\}/, '');
+  const targetUrl = `${uploadEndpoint}?name=${encodeURIComponent(fileName)}&label=${encodeURIComponent(fileLabel || fileName)}`;
 
   for (let i = 0; i < retries; i++) {
     try {
@@ -107,7 +105,7 @@ async function uploadAssetWithRetry(releaseId, uploadUrl, filePath, fileName, fi
         const match = existingAssets.find(a => a.name === fileName || (fileLabel && a.label === fileLabel));
         if (match) {
           if (match.state === 'uploaded' && match.size === fileSize && match.name === fileName) {
-            console.log(`Asset ${fileName} (${fileLabel || ''}) is already fully uploaded (${match.size} bytes). Skipping!`);
+            console.log(`Asset ${fileName} [${fileLabel || ''}] is already fully uploaded (${match.size} bytes). Skipping!`);
             return match;
           } else {
             console.log(`Asset ${match.name} exists with state '${match.state}' / size ${match.size} (expected ${fileSize}). Deleting existing asset ID ${match.id}...`);
@@ -121,56 +119,30 @@ async function uploadAssetWithRetry(releaseId, uploadUrl, filePath, fileName, fi
         }
       }
 
-      console.log(`Uploading ${fileName} [${fileLabel}] (${(fileSize / (1024 * 1024)).toFixed(1)} MB) via Node.js HTTPS Stream (Attempt ${i + 1}/${retries})...`);
+      console.log(`Uploading ${fileName} [${fileLabel}] (${(fileSize / (1024 * 1024)).toFixed(1)} MB) via curl --http1.1 (Attempt ${i + 1}/${retries})...`);
       
-      const resp = await new Promise((resolve, reject) => {
-        const urlObj = new URL(uploadEndpoint);
-        urlObj.searchParams.set('name', fileName);
-        if (fileLabel) {
-          urlObj.searchParams.set('label', fileLabel);
-        }
-
-        const req = https.request({
-          hostname: urlObj.hostname,
-          port: 443,
-          path: `${urlObj.pathname}?${urlObj.searchParams.toString()}`,
-          method: 'POST',
-          headers: {
-            'Authorization': `token ${TOKEN}`,
-            'Content-Type': contentType,
-            'Content-Length': fileSize,
-            'Accept': 'application/vnd.github+json',
-            'X-GitHub-Api-Version': '2022-11-28',
-            'User-Agent': 'TiaoshiBox-Publisher'
-          }
-        }, (res) => {
-          let data = '';
-          res.on('data', chunk => { data += chunk; });
-          res.on('end', () => {
-            try {
-              const json = JSON.parse(data);
-              if (res.statusCode >= 200 && res.statusCode < 300) {
-                resolve(json);
-              } else {
-                reject(new Error(`Upload HTTP ${res.statusCode}: ${JSON.stringify(json)}`));
-              }
-            } catch (e) {
-              reject(new Error(`Upload HTTP ${res.statusCode}: ${data.slice(0, 300)}`));
-            }
-          });
-        });
-
-        req.on('error', reject);
-        req.setTimeout(600000, () => {
-          req.destroy(new Error('Upload timeout (10m)'));
-        });
-
-        const fileStream = fs.createReadStream(filePath, { highWaterMark: 1024 * 1024 });
-        fileStream.pipe(req);
-      });
+      const curlCmd = `curl --http1.1 -s -S --retry 3 --retry-delay 3 ` +
+        `-X POST ` +
+        `-H "Authorization: token ${TOKEN}" ` +
+        `-H "Content-Type: ${contentType}" ` +
+        `-H "User-Agent: TiaoshiBox-Publisher" ` +
+        `--data-binary @"${filePath}" ` +
+        `"${targetUrl}"`;
+        
+      const output = execSync(curlCmd, { encoding: 'utf8', maxBuffer: 50 * 1024 * 1024, timeout: 900000 });
+      let resp = {};
+      try {
+        resp = JSON.parse(output.trim());
+      } catch (e) {
+        throw new Error(`Invalid response JSON: ${output.slice(0, 200)}`);
+      }
       
-      console.log(`Successfully uploaded ${fileName}! (Asset ID: ${resp.id})`);
-      return resp;
+      if (resp.id || resp.state === 'uploaded') {
+        console.log(`Successfully uploaded ${fileName}! (Asset ID: ${resp.id})`);
+        return resp;
+      } else {
+        throw new Error(`Upload response error: ${JSON.stringify(resp)}`);
+      }
     } catch (err) {
       console.error(`Attempt ${i + 1} failed for ${fileName}:`, err.message);
       if (i === retries - 1) throw err;
