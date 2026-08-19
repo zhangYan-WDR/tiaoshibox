@@ -123,6 +123,7 @@ async function uploadAssetWithRetry(releaseId, uploadUrl, filePath, fileName, fi
       
       const curlArgs = [
         '--http1.1',
+        '-L',
         '-s', '-S',
         '--retry', '3',
         '--retry-delay', '3',
