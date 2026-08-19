@@ -785,3 +785,15 @@ ipcMain.handle('opcua:unsubscribe', async (event, id, nodeId) => {
   return { success: false, error: '客户端未连接' };
 });
 
+ipcMain.handle('opcua:call-method', async (event, id, params) => {
+  const client = opcuaClients.get(id);
+  if (!client) return { success: false, error: '客户端未连接' };
+  const { objectId, methodId, inputArguments } = params;
+  try {
+    const result = await client.callMethod(objectId, methodId, inputArguments);
+    return { success: true, ...result };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+});
+

@@ -11,7 +11,9 @@ const {
   TimestampsToReturn,
   BrowseDirection,
   StatusCodes,
-  NodeClass
+  NodeClass,
+  coerceNodeId,
+  Variant
 } = require("node-opcua-client");
 
 const securityModeMap = {
@@ -447,6 +449,85 @@ class OPCUAClientWrapper extends EventEmitter {
 
     this.subscriptions.delete(nodeId);
     this.log('info', `已取消节点 ${nodeId} 的订阅`);
+  }
+
+  async callMethod(objectId, methodId, inputArguments = []) {
+    if (!this.session) {
+      throw new Error("OPC UA 会话未建立");
+    }
+
+    this.logTraffic('send', 'CALL_METHOD', `调用方法: ${methodId} (所属对象: ${objectId})`, {
+      objectId,
+      methodId,
+      inputArguments
+    });
+
+    const formattedInputArgs = (inputArguments || []).map(arg => {
+      let dt = DataType.String;
+      if (arg.dataType && DataType[arg.dataType]) {
+        dt = DataType[arg.dataType];
+      }
+      let val = arg.value;
+      if (dt === DataType.Int32 || dt === DataType.Int16 || dt === DataType.SByte) {
+        val = parseInt(val, 10);
+      } else if (dt === DataType.UInt32 || dt === DataType.UInt16 || dt === DataType.Byte) {
+        val = parseInt(val, 10);
+      } else if (dt === DataType.Float || dt === DataType.Double) {
+        val = parseFloat(val);
+      } else if (dt === DataType.Boolean) {
+        val = (val === true || val === 'true' || val === 1 || val === '1');
+      } else if (dt === DataType.String) {
+        val = typeof val === 'object' ? JSON.stringify(val) : String(val === undefined || val === null ? '' : val);
+      }
+
+      return new Variant({
+        dataType: dt,
+        value: val
+      });
+    });
+
+    const methodToCall = {
+      objectId: coerceNodeId(objectId),
+      methodId: coerceNodeId(methodId),
+      inputArguments: formattedInputArgs
+    };
+
+    const response = await this.session.call(methodToCall);
+
+    const statusCode = response.statusCode ? response.statusCode.toString() : 'Good';
+    const isGood = response.statusCode ? response.statusCode.equals(StatusCodes.Good) : true;
+
+    const outputArguments = (response.outputArguments || []).map(arg => {
+      let val = arg ? arg.value : null;
+      let parsedJson = null;
+      if (typeof val === 'string' && (val.trim().startsWith('{') || val.trim().startsWith('['))) {
+        try {
+          parsedJson = JSON.parse(val);
+        } catch (e) {}
+      }
+      return {
+        dataType: arg && arg.dataType ? (DataType[arg.dataType] || arg.dataType.toString()) : 'Unknown',
+        value: val,
+        parsedJson
+      };
+    });
+
+    const inputArgumentResults = (response.inputArgumentResults || []).map(code => code ? code.toString() : '');
+
+    this.logTraffic('receive', 'CALL_METHOD_RES', `方法调用结果: ${statusCode}`, {
+      statusCode,
+      outputArguments,
+      inputArgumentResults
+    });
+
+    this.log('info', `方法 ${methodId} 调用完成: ${statusCode} (返回 ${outputArguments.length} 个参数)`);
+
+    return {
+      success: isGood,
+      statusCode,
+      outputArguments,
+      inputArgumentResults
+    };
   }
 
   async disconnect() {

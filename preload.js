@@ -225,6 +225,7 @@ contextBridge.exposeInMainWorld('api', {
     writeNode: (id, params) => ipcRenderer.invoke('opcua:write', id, params),
     subscribeNode: (id, nodeId) => ipcRenderer.invoke('opcua:subscribe', id, nodeId),
     unsubscribeNode: (id, nodeId) => ipcRenderer.invoke('opcua:unsubscribe', id, nodeId),
+    callMethod: (id, params) => ipcRenderer.invoke('opcua:call-method', id, params),
     
     onStatusChange: (callback) => {
       const sub = (event, data) => callback(data);

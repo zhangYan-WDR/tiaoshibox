@@ -18,7 +18,13 @@ import {
   Wifi, 
   Globe,
   Eye,
-  EyeOff
+  EyeOff,
+  Zap,
+  Copy,
+  Check,
+  Code,
+  CheckCircle2,
+  AlertCircle
 } from 'lucide-react';
 
 export default function OPCUADashboard() {
@@ -146,6 +152,49 @@ export default function OPCUADashboard() {
   // 写入控制面板状态
   const [writeDataType, setWriteDataType] = useState('Int32');
   const [writeValue, setWriteValue] = useState('');
+
+  // 方法调用控制台状态 (Method Invoker / RPC)
+  const [showMethodModal, setShowMethodModal] = useState(false);
+  const [methodObjectId, setMethodObjectId] = useState('ns=0;i=50000');
+  const [methodId, setMethodId] = useState('ns=1;s=trip_alarm_get');
+  const [methodInputArgs, setMethodInputArgs] = useState([]);
+  const [isCallingMethod, setIsCallingMethod] = useState(false);
+  const [methodResult, setMethodResult] = useState(null);
+  const [selectedMethodPreset, setSelectedMethodPreset] = useState('get_trip_alarm');
+  const [copiedArgIndex, setCopiedArgIndex] = useState(null);
+
+  // 内置常用方法模板
+  const defaultMethodPresets = [
+    {
+      id: 'get_trip_alarm',
+      name: '⚡ [预设] 脱扣告警读取 (trip_alarm_get)',
+      objectId: 'ns=0;i=50000',
+      methodId: 'ns=1;s=trip_alarm_get',
+      inputArguments: []
+    },
+    {
+      id: 'set_trip_alarm',
+      name: '⚡ [预设] 脱扣告警下发设置 (trip_alarm_set)',
+      objectId: 'ns=0;i=50000',
+      methodId: 'ns=1;s=trip_alarm_set',
+      inputArguments: [
+        {
+          id: 'arg_1',
+          dataType: 'String',
+          value: '{"tags":["PCS.Tag1","BAU.Tag2"]}'
+        }
+      ]
+    }
+  ];
+
+  const [savedMethodPresets, setSavedMethodPresets] = useState(() => {
+    try {
+      const stored = JSON.parse(localStorage.getItem('opcua_method_presets') || '[]');
+      return [...defaultMethodPresets, ...stored.filter(s => !defaultMethodPresets.some(d => d.id === s.id))];
+    } catch (e) {
+      return defaultMethodPresets;
+    }
+  });
 
   // 报文日志状态
   const [trafficLogs, setTrafficLogs] = useState([]);
@@ -638,6 +687,138 @@ export default function OPCUADashboard() {
     setLastClickedTableIndex(idx);
   };
 
+  // 方法调用：应用预设模板
+  const handleApplyMethodPreset = (presetId) => {
+    setSelectedMethodPreset(presetId);
+    const preset = savedMethodPresets.find(p => p.id === presetId);
+    if (preset) {
+      setMethodObjectId(preset.objectId);
+      setMethodId(preset.methodId);
+      setMethodInputArgs(JSON.parse(JSON.stringify(preset.inputArguments || [])));
+      setMethodResult(null);
+    }
+  };
+
+  // 方法调用：添加输入参数
+  const handleAddMethodInputArg = () => {
+    const newArg = {
+      id: `arg_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
+      dataType: 'String',
+      value: ''
+    };
+    setMethodInputArgs(prev => [...prev, newArg]);
+  };
+
+  // 方法调用：修改输入参数
+  const handleUpdateMethodInputArg = (argId, field, val) => {
+    setMethodInputArgs(prev => prev.map(arg => {
+      if (arg.id === argId) {
+        return { ...arg, [field]: val };
+      }
+      return arg;
+    }));
+  };
+
+  // 方法调用：删除输入参数
+  const handleRemoveMethodInputArg = (argId) => {
+    setMethodInputArgs(prev => prev.filter(arg => arg.id !== argId));
+  };
+
+  // 方法调用：格式化 JSON 字符串输入
+  const handleFormatArgJson = (argId) => {
+    setMethodInputArgs(prev => prev.map(arg => {
+      if (arg.id === argId) {
+        try {
+          const parsed = JSON.parse(arg.value);
+          return { ...arg, value: JSON.stringify(parsed, null, 2) };
+        } catch (e) {
+          alert('当前输入不是合法的 JSON 格式，无法格式化');
+        }
+      }
+      return arg;
+    }));
+  };
+
+  // 方法调用：保存当前配置为常用方法预设
+  const handleSaveMethodPreset = () => {
+    const presetName = prompt('请输入新方法预设名称 (例如: 脱扣告警自定义):', `自定义方法 (${methodId.split(';').pop() || 'RPC'})`);
+    if (!presetName || !presetName.trim()) return;
+
+    const newPreset = {
+      id: `preset_${Date.now()}`,
+      name: `⚡ ${presetName.trim()}`,
+      objectId: methodObjectId.trim(),
+      methodId: methodId.trim(),
+      inputArguments: JSON.parse(JSON.stringify(methodInputArgs))
+    };
+
+    const nextPresets = [...savedMethodPresets, newPreset];
+    setSavedMethodPresets(nextPresets);
+    setSelectedMethodPreset(newPreset.id);
+    try {
+      localStorage.setItem('opcua_method_presets', JSON.stringify(nextPresets.filter(p => !defaultMethodPresets.some(d => d.id === p.id))));
+    } catch (e) {}
+  };
+
+  // 方法调用：删除常用方法预设
+  const handleDeleteMethodPreset = (presetId) => {
+    if (defaultMethodPresets.some(d => d.id === presetId)) {
+      alert('系统内置预设无法删除');
+      return;
+    }
+    const nextPresets = savedMethodPresets.filter(p => p.id !== presetId);
+    setSavedMethodPresets(nextPresets);
+    setSelectedMethodPreset('get_trip_alarm');
+    try {
+      localStorage.setItem('opcua_method_presets', JSON.stringify(nextPresets.filter(p => !defaultMethodPresets.some(d => d.id === p.id))));
+    } catch (e) {}
+  };
+
+  // 方法调用：执行 RPC 调用
+  const handleExecuteCallMethod = async () => {
+    if (!activeConnId) {
+      alert('请先连接 OPC UA 服务端通道');
+      return;
+    }
+    if (!methodObjectId.trim()) {
+      alert('请输入对象节点 NodeId (ObjectId)');
+      return;
+    }
+    if (!methodId.trim()) {
+      alert('请输入方法节点 NodeId (MethodId)');
+      return;
+    }
+
+    setIsCallingMethod(true);
+    setMethodResult(null);
+
+    try {
+      const res = await window.api.opcua.callMethod(activeConnId, {
+        objectId: methodObjectId.trim(),
+        methodId: methodId.trim(),
+        inputArguments: methodInputArgs.map(a => ({
+          dataType: a.dataType,
+          value: a.value
+        }))
+      });
+      setMethodResult(res);
+    } catch (err) {
+      setMethodResult({
+        success: false,
+        error: err.message
+      });
+    } finally {
+      setIsCallingMethod(false);
+    }
+  };
+
+  // 复制结果文本
+  const handleCopyResultValue = (idx, text) => {
+    navigator.clipboard.writeText(typeof text === 'object' ? JSON.stringify(text, null, 2) : String(text));
+    setCopiedArgIndex(idx);
+    setTimeout(() => setCopiedArgIndex(null), 2000);
+  };
+
   // 递归树节点绘制子组件
   // 递归树节点绘制子组件
   const renderTreeNode = (node) => {
@@ -799,10 +980,53 @@ export default function OPCUADashboard() {
             whiteSpace: 'nowrap', 
             overflow: 'hidden', 
             textOverflow: 'ellipsis',
-            flex: 1 
+            flex: 1,
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px'
           }}>
-            {node.displayName || node.browseName}
+            <span>{node.displayName || node.browseName}</span>
+            {node.nodeClass === 'Method' && (
+              <span style={{ 
+                fontSize: '10px', 
+                background: 'rgba(16, 185, 129, 0.15)', 
+                color: 'var(--color-success)', 
+                border: '1px solid rgba(16, 185, 129, 0.3)',
+                padding: '0 4px', 
+                borderRadius: '3px' 
+              }}>
+                方法
+              </span>
+            )}
           </span>
+
+          {node.nodeClass === 'Method' && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setMethodObjectId('ns=0;i=50000');
+                setMethodId(node.nodeId);
+                setShowMethodModal(true);
+              }}
+              style={{
+                background: 'rgba(108, 92, 231, 0.15)',
+                border: '1px solid rgba(108, 92, 231, 0.3)',
+                color: 'var(--color-primary)',
+                padding: '1px 6px',
+                borderRadius: '3px',
+                fontSize: '10.5px',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '2px',
+                flexShrink: 0
+              }}
+              title="调用此 OPC UA 方法"
+            >
+              <Zap size={10} />
+              调用
+            </button>
+          )}
         </div>
 
         {/* 子节点列表与虚线层级连接引导线 */}
@@ -1328,6 +1552,24 @@ export default function OPCUADashboard() {
                     清空监视舱
                   </button>
                 )}
+
+                {/* 打开方法调用 RPC 弹窗 */}
+                <button 
+                  onClick={() => setShowMethodModal(true)}
+                  className="btn btn-primary"
+                  style={{ 
+                    padding: '4px 12px', 
+                    fontSize: '11.5px', 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    gap: '5px',
+                    boxShadow: '0 2px 6px rgba(108, 92, 231, 0.25)'
+                  }}
+                  title="打开 OPC UA 方法调用与 RPC 控制台"
+                >
+                  <Zap size={13} />
+                  方法调用 (RPC)
+                </button>
               </div>
             </div>
 
@@ -1582,6 +1824,493 @@ export default function OPCUADashboard() {
           </div>
         </div>
       </div>
+
+      {/* 3.5. OPC UA 方法调用与 RPC 控制台模态弹窗 (Method Invoker Modal) */}
+      {showMethodModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0, 0, 0, 0.75)',
+          backdropFilter: 'blur(5px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000
+        }}>
+          <div className="glass-card" style={{
+            width: '640px',
+            maxWidth: '92vw',
+            maxHeight: '90vh',
+            background: 'var(--bg-card)',
+            border: '1px solid var(--border-color)',
+            boxShadow: '0 20px 50px rgba(0,0,0,0.6)',
+            borderRadius: '12px',
+            padding: '20px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '14px',
+            position: 'relative',
+            animation: 'scaleIn 0.2s cubic-bezier(0.34, 1.56, 0.64, 1)',
+            overflow: 'hidden'
+          }}>
+            {/* 模态头 */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border-color)', paddingBottom: '12px', flexShrink: 0 }}>
+              <h3 style={{ margin: 0, fontSize: '15px', fontWeight: '700', color: 'var(--text-light)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Zap size={18} color="var(--color-primary)" />
+                OPC UA 方法调用控制台 (Method Invoker / RPC)
+              </h3>
+              <button 
+                onClick={() => setShowMethodModal(false)} 
+                style={{ 
+                  background: 'transparent', 
+                  border: 'none', 
+                  color: 'var(--text-muted)', 
+                  fontSize: '22px', 
+                  cursor: 'pointer', 
+                  lineHeight: '1',
+                  padding: '2px 6px'
+                }}
+              >
+                ×
+              </button>
+            </div>
+
+            {/* 可滚动表单区域 */}
+            <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '14px', paddingRight: '4px' }}>
+              
+              {/* 常用模板与预设选择栏 */}
+              <div style={{ 
+                display: 'flex', 
+                alignItems: 'center', 
+                justifyContent: 'space-between', 
+                background: 'var(--bg-secondary)', 
+                padding: '8px 12px', 
+                borderRadius: '8px',
+                border: '1px solid var(--border-color)',
+                flexWrap: 'wrap',
+                gap: '8px'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span style={{ fontSize: '12px', color: 'var(--text-muted)', fontWeight: '600' }}>常用模板:</span>
+                  <select 
+                    value={selectedMethodPreset}
+                    onChange={(e) => handleApplyMethodPreset(e.target.value)}
+                    style={{ 
+                      padding: '4px 8px', 
+                      fontSize: '12px', 
+                      background: 'var(--bg-card)', 
+                      color: 'var(--text-light)', 
+                      border: '1px solid var(--border-color)', 
+                      borderRadius: '4px',
+                      maxWidth: '280px'
+                    }}
+                  >
+                    {savedMethodPresets.map(preset => (
+                      <option key={preset.id} value={preset.id}>{preset.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div style={{ display: 'flex', gap: '6px' }}>
+                  <button 
+                    type="button" 
+                    onClick={handleSaveMethodPreset}
+                    className="btn btn-secondary"
+                    style={{ padding: '3px 8px', fontSize: '11.5px', display: 'flex', alignItems: 'center', gap: '4px' }}
+                    title="将当前对象、方法与输入参数保存为新预设"
+                  >
+                    <Bookmark size={12} />
+                    另存预设
+                  </button>
+                  {!defaultMethodPresets.some(d => d.id === selectedMethodPreset) && (
+                    <button 
+                      type="button" 
+                      onClick={() => handleDeleteMethodPreset(selectedMethodPreset)}
+                      className="btn"
+                      style={{ 
+                        padding: '3px 8px', 
+                        fontSize: '11.5px', 
+                        background: 'rgba(255, 56, 96, 0.15)', 
+                        color: 'var(--color-danger)', 
+                        border: '1px solid rgba(255, 56, 96, 0.3)' 
+                      }}
+                      title="删除当前自定义预设"
+                    >
+                      <Trash2 size={12} />
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* 对象节点与方法节点输入 */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <label style={{ fontSize: '12px', color: 'var(--text-muted)', fontWeight: '600' }}>
+                    所属对象节点 (ObjectId) <span style={{ color: 'var(--color-danger)' }}>*</span>
+                  </label>
+                  <input 
+                    type="text" 
+                    className="input-field" 
+                    value={methodObjectId} 
+                    onChange={e => setMethodObjectId(e.target.value)} 
+                    placeholder="如 ns=0;i=50000 或 ns=0;i=85" 
+                    style={{ fontSize: '12px', padding: '6px 8px', fontFamily: 'var(--font-mono)' }} 
+                    required 
+                  />
+                  <span style={{ fontSize: '10.5px', color: 'var(--text-muted)' }}>方法所属的父对象节点 ID</span>
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <label style={{ fontSize: '12px', color: 'var(--text-muted)', fontWeight: '600' }}>
+                    目标方法节点 (MethodId) <span style={{ color: 'var(--color-danger)' }}>*</span>
+                  </label>
+                  <input 
+                    type="text" 
+                    className="input-field" 
+                    value={methodId} 
+                    onChange={e => setMethodId(e.target.value)} 
+                    placeholder="如 ns=1;s=trip_alarm_get" 
+                    style={{ fontSize: '12px', padding: '6px 8px', fontFamily: 'var(--font-mono)' }} 
+                    required 
+                  />
+                  <span style={{ fontSize: '10.5px', color: 'var(--text-muted)' }}>待调用的方法节点 NodeId</span>
+                </div>
+              </div>
+
+              {/* 输入参数配置区 */}
+              <div style={{ 
+                border: '1px solid var(--border-color)', 
+                borderRadius: '8px', 
+                background: 'var(--bg-secondary)', 
+                padding: '12px', 
+                display: 'flex', 
+                flexDirection: 'column', 
+                gap: '10px' 
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontSize: '12.5px', fontWeight: '700', color: 'var(--text-light)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <Code size={14} color="var(--color-primary)" />
+                    输入参数配置 (Input Arguments - {methodInputArgs.length})
+                  </span>
+                  <div style={{ display: 'flex', gap: '6px' }}>
+                    <button 
+                      type="button" 
+                      onClick={handleAddMethodInputArg}
+                      className="btn btn-secondary"
+                      style={{ padding: '3px 8px', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px' }}
+                    >
+                      <Plus size={12} />
+                      添加参数
+                    </button>
+                    {methodInputArgs.length > 0 && (
+                      <button 
+                        type="button" 
+                        onClick={() => setMethodInputArgs([])}
+                        className="btn btn-secondary"
+                        style={{ padding: '3px 8px', fontSize: '11px' }}
+                      >
+                        清空参数
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* 参数列表 */}
+                {methodInputArgs.length === 0 ? (
+                  <div style={{ 
+                    padding: '12px', 
+                    background: 'var(--bg-card)', 
+                    borderRadius: '6px', 
+                    fontSize: '11.5px', 
+                    color: 'var(--text-muted)', 
+                    textAlign: 'center',
+                    border: '1px dashed var(--border-color)' 
+                  }}>
+                    💡 当前为无参数方法调用（如读取方法 <code>trip_alarm_get</code>），直接点击下方「⚡ 执行方法调用」即可。
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    {methodInputArgs.map((arg, idx) => (
+                      <div key={arg.id} style={{ 
+                        background: 'var(--bg-card)', 
+                        border: '1px solid var(--border-color)', 
+                        borderRadius: '6px', 
+                        padding: '10px', 
+                        display: 'flex', 
+                        flexDirection: 'column', 
+                        gap: '6px' 
+                      }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <span style={{ fontSize: '11.5px', fontWeight: '700', color: 'var(--color-primary)' }}>
+                            参数 #{idx + 1}
+                          </span>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                              <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>类型:</span>
+                              <select 
+                                value={arg.dataType}
+                                onChange={(e) => handleUpdateMethodInputArg(arg.id, 'dataType', e.target.value)}
+                                style={{ 
+                                  padding: '2px 6px', 
+                                  fontSize: '11px', 
+                                  background: 'var(--bg-secondary)', 
+                                  color: 'var(--text-light)', 
+                                  border: '1px solid var(--border-color)', 
+                                  borderRadius: '4px' 
+                                }}
+                              >
+                                <option value="String">String (含 JSON)</option>
+                                <option value="Int32">Int32</option>
+                                <option value="UInt32">UInt32</option>
+                                <option value="Int16">Int16</option>
+                                <option value="UInt16">UInt16</option>
+                                <option value="Float">Float</option>
+                                <option value="Double">Double</option>
+                                <option value="Boolean">Boolean</option>
+                                <option value="Byte">Byte</option>
+                              </select>
+                            </div>
+                            {arg.dataType === 'String' && (
+                              <button 
+                                type="button" 
+                                onClick={() => handleFormatArgJson(arg.id)}
+                                style={{ 
+                                  background: 'transparent', 
+                                  border: '1px solid var(--border-color)', 
+                                  color: 'var(--text-muted)', 
+                                  padding: '2px 6px', 
+                                  borderRadius: '4px', 
+                                  fontSize: '10.5px',
+                                  cursor: 'pointer' 
+                                }}
+                                title="尝试将当前文本格式化为标准 JSON"
+                              >
+                                格式化 JSON
+                              </button>
+                            )}
+                            <button 
+                              type="button" 
+                              onClick={() => handleRemoveMethodInputArg(arg.id)}
+                              style={{ 
+                                background: 'transparent', 
+                                border: 'none', 
+                                color: 'var(--color-danger)', 
+                                cursor: 'pointer', 
+                                padding: '2px 4px' 
+                              }}
+                              title="删除此参数"
+                            >
+                              <Trash2 size={12} />
+                            </button>
+                          </div>
+                        </div>
+
+                        {arg.dataType === 'String' ? (
+                          <textarea 
+                            value={arg.value}
+                            onChange={(e) => handleUpdateMethodInputArg(arg.id, 'value', e.target.value)}
+                            placeholder='输入参数值，如 {"tags":["PCS.Tag1","BAU.Tag2"]}'
+                            style={{ 
+                              width: '100%', 
+                              height: '65px', 
+                              padding: '6px 8px', 
+                              fontSize: '11.5px', 
+                              fontFamily: 'var(--font-mono)', 
+                              background: 'var(--bg-secondary)', 
+                              color: 'var(--text-light)', 
+                              border: '1px solid var(--border-color)', 
+                              borderRadius: '4px',
+                              resize: 'vertical',
+                              boxSizing: 'border-box'
+                            }}
+                          />
+                        ) : arg.dataType === 'Boolean' ? (
+                          <select 
+                            value={arg.value}
+                            onChange={(e) => handleUpdateMethodInputArg(arg.id, 'value', e.target.value)}
+                            style={{ 
+                              padding: '5px 8px', 
+                              fontSize: '12px', 
+                              background: 'var(--bg-secondary)', 
+                              color: 'var(--text-light)', 
+                              border: '1px solid var(--border-color)', 
+                              borderRadius: '4px' 
+                            }}
+                          >
+                            <option value="true">true (真)</option>
+                            <option value="false">false (假)</option>
+                          </select>
+                        ) : (
+                          <input 
+                            type="text" 
+                            value={arg.value}
+                            onChange={(e) => handleUpdateMethodInputArg(arg.id, 'value', e.target.value)}
+                            placeholder={`输入 ${arg.dataType} 数值`}
+                            style={{ 
+                              width: '100%', 
+                              padding: '5px 8px', 
+                              fontSize: '11.5px', 
+                              fontFamily: 'var(--font-mono)', 
+                              background: 'var(--bg-secondary)', 
+                              color: 'var(--text-light)', 
+                              border: '1px solid var(--border-color)', 
+                              borderRadius: '4px',
+                              boxSizing: 'border-box'
+                            }}
+                          />
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* 发起调用操作按钮 */}
+              <button 
+                type="button" 
+                onClick={handleExecuteCallMethod}
+                className="btn btn-primary"
+                disabled={isCallingMethod || !activeConnId}
+                style={{ 
+                  padding: '10px', 
+                  fontSize: '13px', 
+                  fontWeight: '700', 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  justifyContent: 'center', 
+                  gap: '6px',
+                  boxShadow: '0 4px 12px rgba(108, 92, 231, 0.3)'
+                }}
+              >
+                <Zap size={15} />
+                {isCallingMethod ? '正在执行方法调用 (Calling Method)...' : '⚡ 发送方法调用 (Execute Call)'}
+              </button>
+
+              {/* 返回结果面板 */}
+              {methodResult && (
+                <div style={{ 
+                  border: `1px solid ${methodResult.success ? 'rgba(0, 184, 148, 0.3)' : 'rgba(255, 76, 76, 0.3)'}`, 
+                  borderRadius: '8px', 
+                  background: methodResult.success ? 'rgba(0, 184, 148, 0.05)' : 'rgba(255, 76, 76, 0.05)', 
+                  padding: '12px', 
+                  display: 'flex', 
+                  flexDirection: 'column', 
+                  gap: '10px' 
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontSize: '12.5px', fontWeight: '700', color: methodResult.success ? 'var(--color-success)' : 'var(--color-danger)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      {methodResult.success ? <CheckCircle2 size={16} /> : <AlertCircle size={16} />}
+                      调用结果: {methodResult.success ? '成功' : '失败'}
+                    </span>
+                    <span style={{ 
+                      fontSize: '11px', 
+                      fontFamily: 'var(--font-mono)', 
+                      padding: '2px 8px', 
+                      borderRadius: '4px', 
+                      background: methodResult.success ? 'rgba(0, 184, 148, 0.15)' : 'rgba(255, 76, 76, 0.15)',
+                      color: methodResult.success ? 'var(--color-success)' : 'var(--color-danger)',
+                      fontWeight: '700'
+                    }}>
+                      {methodResult.statusCode || (methodResult.error ? 'BadCall' : 'Good')}
+                    </span>
+                  </div>
+
+                  {methodResult.error && (
+                    <div style={{ color: 'var(--color-danger)', fontSize: '11.5px', fontFamily: 'var(--font-mono)' }}>
+                      错误详情: {methodResult.error}
+                    </div>
+                  )}
+
+                  {/* 返回输出参数展示 */}
+                  {methodResult.outputArguments && methodResult.outputArguments.length > 0 && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      <span style={{ fontSize: '11.5px', fontWeight: '700', color: 'var(--text-light)' }}>
+                        输出返回值 (Output Arguments - {methodResult.outputArguments.length}):
+                      </span>
+                      {methodResult.outputArguments.map((outArg, idx) => (
+                        <div key={idx} style={{ 
+                          background: 'var(--bg-card)', 
+                          border: '1px solid var(--border-color)', 
+                          borderRadius: '6px', 
+                          padding: '8px 10px',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: '6px'
+                        }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <span style={{ fontSize: '11px', color: 'var(--color-primary)', fontWeight: '700' }}>
+                              返回值 #{idx + 1} <span style={{ color: 'var(--text-muted)', fontWeight: 'normal' }}>[{outArg.dataType}]</span>
+                            </span>
+                            <button 
+                              type="button" 
+                              onClick={() => handleCopyResultValue(idx, outArg.parsedJson || outArg.value)}
+                              style={{ 
+                                background: 'transparent', 
+                                border: '1px solid var(--border-color)', 
+                                color: copiedArgIndex === idx ? 'var(--color-success)' : 'var(--text-muted)', 
+                                padding: '2px 6px', 
+                                borderRadius: '4px', 
+                                fontSize: '10.5px',
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '3px'
+                              }}
+                            >
+                              {copiedArgIndex === idx ? <Check size={11} /> : <Copy size={11} />}
+                              {copiedArgIndex === idx ? '已复制' : '复制结果'}
+                            </button>
+                          </div>
+
+                          <pre style={{ 
+                            margin: 0, 
+                            padding: '8px', 
+                            background: 'var(--bg-secondary)', 
+                            borderRadius: '4px', 
+                            fontSize: '11.5px', 
+                            fontFamily: 'var(--font-mono)', 
+                            color: 'var(--text-light)', 
+                            overflowX: 'auto',
+                            maxHeight: '160px',
+                            whiteSpace: 'pre-wrap',
+                            wordBreak: 'break-all'
+                          }}>
+                            {outArg.parsedJson 
+                              ? JSON.stringify(outArg.parsedJson, null, 2) 
+                              : (outArg.value !== null && outArg.value !== undefined ? outArg.value.toString() : 'null')}
+                          </pre>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {methodResult.success && (!methodResult.outputArguments || methodResult.outputArguments.length === 0) && (
+                    <div style={{ fontSize: '11.5px', color: 'var(--color-success)' }}>
+                      ✅ 方法执行成功，服务端未定义返回值（Void）。
+                    </div>
+                  )}
+                </div>
+              )}
+
+            </div>
+
+            {/* 模态底部关闭栏 */}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', borderTop: '1px solid var(--border-color)', paddingTop: '10px', flexShrink: 0 }}>
+              <button 
+                type="button" 
+                onClick={() => setShowMethodModal(false)} 
+                className="btn btn-secondary" 
+                style={{ padding: '6px 16px', fontSize: '12px' }}
+              >
+                关闭
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 4. 浮动元素详情弹出窗口 (Backdrop Modal) */}
       {detailNode && (
