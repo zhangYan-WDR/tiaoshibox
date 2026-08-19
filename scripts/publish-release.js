@@ -68,7 +68,8 @@ function request(options, body) {
 }
 
 async function uploadAssetWithRetry(releaseId, uploadUrl, filePath, fileName, contentType, retries = 5) {
-  const cleanUrl = uploadUrl.replace(/\{\?name,label\}/, '') + `?name=${encodeURIComponent(fileName)}`;
+  const uploadEndpoint = uploadUrl.replace(/\{\?name,label\}/, '');
+  const targetUrl = `${uploadEndpoint}?name=${encodeURIComponent(fileName)}`;
   const fileSize = fs.statSync(filePath).size;
 
   for (let i = 0; i < retries; i++) {
@@ -81,13 +82,13 @@ async function uploadAssetWithRetry(releaseId, uploadUrl, filePath, fileName, co
       });
 
       if (Array.isArray(existingAssets)) {
-        const match = existingAssets.find(a => a.name === fileName);
+        const match = existingAssets.find(a => a.name === fileName || a.name.includes(fileName.replace('调试百宝箱', '')));
         if (match) {
-          if (match.state === 'uploaded' && match.size === fileSize) {
+          if (match.state === 'uploaded' && match.size === fileSize && match.name === fileName) {
             console.log(`Asset ${fileName} is already fully uploaded (${match.size} bytes). Skipping!`);
             return match;
           } else {
-            console.log(`Asset ${fileName} exists with state '${match.state}' / size ${match.size} (expected ${fileSize}). Deleting existing asset ID ${match.id}...`);
+            console.log(`Asset ${match.name} exists with state '${match.state}' / size ${match.size} (expected ${fileSize}). Deleting existing asset ID ${match.id}...`);
             await request({
               hostname: 'api.github.com',
               path: `/repos/${REPO}/releases/assets/${match.id}`,
@@ -100,19 +101,28 @@ async function uploadAssetWithRetry(releaseId, uploadUrl, filePath, fileName, co
 
       console.log(`Uploading ${fileName} (${(fileSize / (1024 * 1024)).toFixed(1)} MB) via curl --http1.1 (Attempt ${i + 1}/${retries})...`);
       
-      const curlCmd = `curl --http1.1 -X POST -s -S --retry 3 --retry-delay 3 ` +
-        `-H "Authorization: token ${TOKEN}" ` +
-        `-H "Content-Type: ${contentType}" ` +
-        `-H "User-Agent: TiaoshiBox-Publisher" ` +
-        `--data-binary @"${filePath}" ` +
-        `"${cleanUrl}"`;
+      const curlArgs = [
+        '--http1.1',
+        '-X', 'POST',
+        '-s', '-S',
+        '--retry', '3',
+        '--retry-delay', '3',
+        '-H', `Authorization: token ${TOKEN}`,
+        '-H', `Content-Type: ${contentType}`,
+        '-H', 'User-Agent: TiaoshiBox-Publisher',
+        '--data-binary', `@${filePath}`,
+        targetUrl
+      ];
         
-      const output = execSync(curlCmd, { encoding: 'utf8', maxBuffer: 50 * 1024 * 1024, timeout: 900000 });
+      const result = spawnSync('curl', curlArgs, { encoding: 'utf8', maxBuffer: 50 * 1024 * 1024, timeout: 900000 });
+      if (result.error) throw result.error;
+      if (result.status !== 0) throw new Error(`curl exited with code ${result.status}: ${result.stderr}`);
+
       let resp = {};
       try {
-        resp = JSON.parse(output);
+        resp = JSON.parse(result.stdout.trim());
       } catch (e) {
-        throw new Error(`Invalid response JSON: ${output.slice(0, 200)}`);
+        throw new Error(`Invalid response JSON: ${result.stdout.slice(0, 200)}`);
       }
       
       if (resp.id || resp.state === 'uploaded') {
@@ -190,6 +200,7 @@ async function run() {
       prerelease: false
     });
     console.log(`New release created! ID: ${releaseData.id}`);
+    }
 
     const uploadUrl = releaseData.upload_url;
 
