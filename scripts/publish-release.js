@@ -90,7 +90,7 @@ function request(options, body) {
 async function uploadAssetWithRetry(releaseId, uploadUrl, filePath, fileName, fileLabel, contentType, retries = 5) {
   const fileSize = fs.statSync(filePath).size;
   const uploadEndpoint = uploadUrl.replace(/\{\?name,label\}/, '');
-  const targetUrl = `${uploadEndpoint}?name=${encodeURIComponent(fileName)}&label=${encodeURIComponent(fileLabel || fileName)}`;
+  const urlWithParams = `${uploadEndpoint}?name=${encodeURIComponent(fileName)}&label=${encodeURIComponent(fileLabel || fileName)}`;
 
   for (let i = 0; i < retries; i++) {
     try {
@@ -104,7 +104,7 @@ async function uploadAssetWithRetry(releaseId, uploadUrl, filePath, fileName, fi
       if (Array.isArray(existingAssets)) {
         const match = existingAssets.find(a => a.name === fileName || (fileLabel && a.label === fileLabel));
         if (match) {
-          if (match.state === 'uploaded' && match.size === fileSize && match.name === fileName) {
+          if (match.state === 'uploaded' && match.size === fileSize) {
             console.log(`Asset ${fileName} [${fileLabel || ''}] is already fully uploaded (${match.size} bytes). Skipping!`);
             return match;
           } else {
@@ -119,22 +119,30 @@ async function uploadAssetWithRetry(releaseId, uploadUrl, filePath, fileName, fi
         }
       }
 
-      console.log(`Uploading ${fileName} [${fileLabel}] (${(fileSize / (1024 * 1024)).toFixed(1)} MB) via curl --http1.1 (Attempt ${i + 1}/${retries})...`);
+      console.log(`Uploading ${fileName} [${fileLabel}] (${(fileSize / (1024 * 1024)).toFixed(1)} MB) via curl (Attempt ${i + 1}/${retries})...`);
       
-      const curlCmd = `curl --http1.1 -L -s -S --retry 3 --retry-delay 3 ` +
-        `-X POST ` +
-        `-H "Authorization: token ${TOKEN}" ` +
-        `-H "Content-Type: ${contentType}" ` +
-        `-H "User-Agent: TiaoshiBox-Publisher" ` +
-        `--data-binary @"${filePath}" ` +
-        `"${targetUrl}"`;
+      const curlArgs = [
+        '--http1.1',
+        '-s', '-S',
+        '--retry', '3',
+        '--retry-delay', '3',
+        '-X', 'POST',
+        '-H', `Authorization: token ${TOKEN}`,
+        '-H', `Content-Type: ${contentType}`,
+        '-H', 'User-Agent: TiaoshiBox-Publisher',
+        '--data-binary', `@${filePath}`,
+        urlWithParams
+      ];
         
-      const output = execSync(curlCmd, { encoding: 'utf8', maxBuffer: 50 * 1024 * 1024, timeout: 900000 });
+      const result = spawnSync('curl', curlArgs, { encoding: 'utf8', maxBuffer: 50 * 1024 * 1024, timeout: 900000 });
+      if (result.error) throw result.error;
+      if (result.status !== 0) throw new Error(`curl exited with code ${result.status}: ${result.stderr}`);
+
       let resp = {};
       try {
-        resp = JSON.parse(output.trim());
+        resp = JSON.parse(result.stdout.trim());
       } catch (e) {
-        throw new Error(`Invalid response JSON: ${output.slice(0, 200)}`);
+        throw new Error(`Invalid response JSON: ${result.stdout.slice(0, 200)}`);
       }
       
       if (resp.id || resp.state === 'uploaded') {
